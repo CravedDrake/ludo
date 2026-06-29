@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ludo — Play with Friends</title>
+
+  <!--
+    ╔══════════════════════════════════════════════════════╗
+    ║  Ludo Multiplayer — Home Page                        ║
+    ║  Step 1: UI only, no Firebase yet                    ║
+    ╚══════════════════════════════════════════════════════╝
+  -->
+
+  <!-- Google Fonts: Baloo 2 (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ░░░ Decorative background grid (pure CSS atmosphere) ░░░ -->
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <!-- ░░░ Page wrapper ░░░ -->
+  <main class="page">
+
+    <!-- ╔═══════════════════════════════╗ -->
+    <!-- ║  HERO / LOGO SECTION          ║ -->
+    <!-- ╚═══════════════════════════════╝ -->
+    <header class="hero">
+
+      <!-- Animated spinning Ludo token (CSS only) — the signature element -->
+      <div class="ludo-token" aria-hidden="true">
+        <div class="ludo-token__body">
+          <div class="ludo-token__dome"></div>
+        </div>
+      </div>
+
+      <h1 class="hero__title">LUDO</h1>
+      <p class="hero__tagline">Grab your friends. Roll the dice.</p>
+
+    </header>
+
+    <!-- ╔═══════════════════════════════╗ -->
+    <!-- ║  GAME SETUP CARD              ║ -->
+    <!-- ╚═══════════════════════════════╝ -->
+    <section class="card" role="region" aria-label="Game setup">
+
+      <!-- ── Name input ── -->
+      <div class="field">
+        <label class="field__label" for="player-name">Your name</label>
+        <input
+          id="player-name"
+          class="field__input"
+          type="text"
+          placeholder="Input your name or nickname"
+          maxlength="20"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <span class="field__error" id="name-error" role="alert"></span>
+      </div>
+
+      <!-- ── Player count ── -->
+      <div class="field">
+        <span class="field__label" id="count-label">Number of players</span>
+
+        <div class="count-group" role="group" aria-labelledby="count-label">
+
+          <!-- 2 players — red + blue -->
+          <button
+            class="count-btn"
+            data-count="2"
+            aria-pressed="false"
+            type="button"
+          >
+            <span class="count-btn__pips">
+              <span class="pip pip--red"></span>
+              <span class="pip pip--blue"></span>
+            </span>
+            <span class="count-btn__number">2</span>
+            <span class="count-btn__label">Players</span>
+          </button>
+
+          <!-- 3 players — red + blue + green -->
+          <button
+            class="count-btn"
+            data-count="3"
+            aria-pressed="false"
+            type="button"
+          >
+            <span class="count-btn__pips">
+              <span class="pip pip--red"></span>
+              <span class="pip pip--blue"></span>
+              <span class="pip pip--green"></span>
+            </span>
+            <span class="count-btn__number">3</span>
+            <span class="count-btn__label">Players</span>
+          </button>
+
+          <!-- 4 players — all colors -->
+          <button
+            class="count-btn"
+            data-count="4"
+            aria-pressed="false"
+            type="button"
+          >
+            <span class="count-btn__pips count-btn__pips--four">
+              <span class="pip pip--red"></span>
+              <span class="pip pip--blue"></span>
+              <span class="pip pip--green"></span>
+              <span class="pip pip--yellow"></span>
+            </span>
+            <span class="count-btn__number">4</span>
+            <span class="count-btn__label">Players</span>
+          </button>
+
+        </div>
+
+        <span class="field__error" id="count-error" role="alert"></span>
+      </div>
+
+      <!-- ── Create Game button ── -->
+      <button class="btn-create" id="create-btn" type="button">
+        <span class="btn-create__icon" aria-hidden="true">🎲</span>
+        Create Game
+      </button>
+
+    </section>
+
+    <!-- ╔═══════════════════════════════╗ -->
+    <!-- ║  ROOM OUTPUT (hidden at first)║ -->
+    <!-- ╚═══════════════════════════════╝ -->
+    <section
+      class="room-panel"
+      id="room-panel"
+      aria-live="polite"
+      aria-label="Room created"
+      hidden
+    >
+      <p class="room-panel__eyebrow">Room created — share with friends</p>
+
+      <!-- Large room code display -->
+      <div class="room-code" id="room-code-display" aria-label="Room code"></div>
+
+      <!-- Copyable link row -->
+      <div class="link-row">
+        <input
+          class="link-row__input"
+          id="room-link-input"
+          type="text"
+          readonly
+          aria-label="Shareable invite link"
+        />
+        <button class="link-row__copy" id="copy-btn" type="button">
+          Copy
+        </button>
+      </div>
+
+      <p class="room-panel__hint" id="copy-hint"></p>
+
+      <!--
+        Step 3 will add a "Go to Room" button here that navigates
+        to room.html?code=XXXXXX after creating the room in Firebase.
+      -->
+    </section>
+
+    <p class="footer-note">No login needed · Just share the link · Play</p>
+
+  </main>
+
+
+  <!-- ╔══════════════════════════════════════════════════════╗ -->
+  <!-- ║  JAVASCRIPT — Home Page Logic (Step 1)               ║ -->
+  <!-- ║  Firebase will be added in Step 2.                   ║ -->
+  <!-- ╚══════════════════════════════════════════════════════╝ -->
+    <script type="module" src="script.js"></script>
+</body>
+</html>

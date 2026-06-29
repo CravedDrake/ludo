@@ -1,0 +1,454 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ludo — Waiting Room</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
+        rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="room.css" />
+    </head>
+
+    <body>
+
+    <div class="bg-grid" aria-hidden="true"></div>
+
+    <!-- ╔════════ WAITING ROOM UI ════════╗ -->
+    <main class="page">
+
+    <!-- HEADER -->
+    <header class="hero">
+        <div class="ludo-token" aria-hidden="true">
+        <div class="ludo-token__body">
+            <div class="ludo-token__dome"></div>
+        </div>
+        </div>
+        <h1 class="hero__title">LUDO</h1>
+        <p class="hero__subtitle">Waiting Room</p>
+    </header>
+
+    <!-- ROOM INFO -->
+    <section class="card" aria-label="Room information">
+        <h2 class="card__heading">Room Code</h2>
+        <div class="room-code-row">
+        <span class="room-code" id="room-code">……</span>
+        <button class="btn-copy" id="copy-room-btn" type="button">Copy</button>
+        </div>
+        <div class="divider"></div>
+        <div class="game-status-row">
+        <span class="game-status__label">Game Status</span>
+        <span class="game-status__value" id="game-status">Waiting for players…</span>
+        </div>
+    </section>
+
+    <!-- JOIN CARD -->
+    <section class="card" id="join-card">
+        <h2 class="card__heading">Join Room</h2>
+        <div class="field">
+        <input
+            type="text"
+            id="join-name"
+            class="field__input"
+            placeholder="Enter your name"
+            maxlength="20"
+            autocomplete="off"
+        />
+        </div>
+        <button id="join-btn" class="btn-create" type="button">Join Game</button>
+    </section>
+
+    <!-- PLAYERS -->
+    <section class="card">
+        <h2 class="card__heading">Players</h2>
+        <ul class="player-list">
+        <li class="player-slot player-slot--empty" id="player1-slot">
+            <div class="player-slot__color player-slot__color--red"></div>
+            <div class="player-slot__info">
+            <span id="player1-name">Waiting…</span>
+            <span id="player1-status">Empty</span>
+            </div>
+            <span class="badge badge--host">Host</span>
+        </li>
+        <li class="player-slot player-slot--empty" id="player2-slot">
+            <div class="player-slot__color player-slot__color--blue"></div>
+            <div class="player-slot__info">
+            <span id="player2-name">Waiting…</span>
+            <span id="player2-status">Empty</span>
+            </div>
+        </li>
+        <li class="player-slot player-slot--empty" id="player3-slot">
+            <div class="player-slot__color player-slot__color--green"></div>
+            <div class="player-slot__info">
+            <span id="player3-name">Waiting…</span>
+            <span id="player3-status">Empty</span>
+            </div>
+        </li>
+        <li class="player-slot player-slot--empty" id="player4-slot">
+            <div class="player-slot__color player-slot__color--yellow"></div>
+            <div class="player-slot__info">
+            <span id="player4-name">Waiting…</span>
+            <span id="player4-status">Empty</span>
+            </div>
+        </li>
+        </ul>
+    </section>
+
+    <!-- ACTIONS -->
+    <div class="action-row">
+        <button class="btn-leave" id="leave-room-btn" type="button">Leave Room</button>
+        <button
+        class="btn-start btn-start--disabled"
+        id="start-game-btn"
+        aria-disabled="true"
+        type="button"
+        >🎲 Start Game</button>
+    </div>
+
+    <p class="waiting-message" id="waiting-message">Waiting for more players…</p>
+
+    </main>
+
+    <!-- ╔════════ GAME UI ════════╗ -->
+    <div id="game-container" style="display:none;">
+
+    <div class="game-header">
+        <div id="turn-indicator"></div>
+        <div class="dice-row">
+        <button id="roll-dice-btn" type="button">🎲 Roll Dice</button>
+        <div id="dice-value">–</div>
+        </div>
+    </div>
+
+    <!--
+        LUDO BOARD — 15×15 grid
+        Layout key:
+        Columns 0–5   = left block
+        Column  6     = vertical corridor
+        Columns 7–8   = center columns  (shared with horizontal corridor)
+        Column  9–14  = right block
+
+        Rows 0–5   = top block
+        Row  6     = horizontal corridor
+        Rows 7–8   = center rows        (shared with vertical corridor)
+        Row  9–14  = bottom block
+
+        Corner zones (6×6 squares):
+        Red    = rows 0–5,  cols 0–5
+        Blue   = rows 0–5,  cols 9–14
+        Green  = rows 9–14, cols 0–5
+        Yellow = rows 9–14, cols 9–14
+
+        Home stretch (6 cells leading to center):
+        Red    runs right along row 7,   cols 1–6
+        Blue   runs down  along col 7,   rows 1–6
+        Green  runs up    along col 7,   rows 8–13
+        Yellow runs left  along row 7,   cols 8–13
+
+        Center square = rows 6–8, cols 6–8 (3×3 finishing zone)
+
+        Track path cell IDs = "c-ROW-COL"
+    -->
+
+    <div id="ludo-board">
+
+        <!-- ── ROW 0 ── -->
+        <!-- Red home zone rows 0-5, cols 0-5 -->
+        <div class="b-cell zone-red"    id="c-0-0"></div>
+        <div class="b-cell zone-red"    id="c-0-1"></div>
+        <div class="b-cell zone-red"    id="c-0-2"></div>
+        <div class="b-cell zone-red"    id="c-0-3"></div>
+        <div class="b-cell zone-red"    id="c-0-4"></div>
+        <div class="b-cell zone-red"    id="c-0-5"></div>
+        <!-- track col 6 -->
+        <div class="b-cell track"       id="c-0-6"></div>
+        <!-- blue home cols 7-8 blank fillers for row 0 become track -->
+        <div class="b-cell track safe-blue" id="c-0-7"></div>
+        <div class="b-cell track"       id="c-0-8"></div>
+        <!-- Blue home zone rows 0-5, cols 9-14 -->
+        <div class="b-cell zone-blue"   id="c-0-9"></div>
+        <div class="b-cell zone-blue"   id="c-0-10"></div>
+        <div class="b-cell zone-blue"   id="c-0-11"></div>
+        <div class="b-cell zone-blue"   id="c-0-12"></div>
+        <div class="b-cell zone-blue"   id="c-0-13"></div>
+        <div class="b-cell zone-blue"   id="c-0-14"></div>
+
+        <!-- ── ROW 1 ── -->
+        <div class="b-cell zone-red"    id="c-1-0"></div>
+        <div class="b-cell home-inner red-inner" id="c-1-1"></div>
+        <div class="b-cell home-inner red-inner" id="c-1-2"></div>
+        <div class="b-cell home-inner red-inner" id="c-1-3"></div>
+        <div class="b-cell home-inner red-inner" id="c-1-4"></div>
+        <div class="b-cell zone-red"    id="c-1-5"></div>
+        <div class="b-cell track"       id="c-1-6"></div>
+        <div class="b-cell home-stretch stretch-blue" id="c-1-7"></div>
+        <div class="b-cell track"       id="c-1-8"></div>
+        <div class="b-cell zone-blue"   id="c-1-9"></div>
+        <div class="b-cell home-inner blue-inner" id="c-1-10"></div>
+        <div class="b-cell home-inner blue-inner" id="c-1-11"></div>
+        <div class="b-cell home-inner blue-inner" id="c-1-12"></div>
+        <div class="b-cell home-inner blue-inner" id="c-1-13"></div>
+        <div class="b-cell zone-blue"   id="c-1-14"></div>
+
+        <!-- ── ROW 2 ── -->
+        <div class="b-cell zone-red"    id="c-2-0"></div>
+        <div class="b-cell home-inner red-inner" id="c-2-1"></div>
+        <div class="b-cell home-inner red-inner" id="c-2-2"></div>
+        <div class="b-cell home-inner red-inner" id="c-2-3"></div>
+        <div class="b-cell home-inner red-inner" id="c-2-4"></div>
+        <div class="b-cell zone-red"    id="c-2-5"></div>
+        <div class="b-cell track"       id="c-2-6"></div>
+        <div class="b-cell home-stretch stretch-blue" id="c-2-7"></div>
+        <div class="b-cell track"       id="c-2-8"></div>
+        <div class="b-cell zone-blue"   id="c-2-9"></div>
+        <div class="b-cell home-inner blue-inner" id="c-2-10"></div>
+        <div class="b-cell home-inner blue-inner" id="c-2-11"></div>
+        <div class="b-cell home-inner blue-inner" id="c-2-12"></div>
+        <div class="b-cell home-inner blue-inner" id="c-2-13"></div>
+        <div class="b-cell zone-blue"   id="c-2-14"></div>
+
+        <!-- ── ROW 3 ── -->
+        <div class="b-cell zone-red"    id="c-3-0"></div>
+        <div class="b-cell home-inner red-inner" id="c-3-1"></div>
+        <div class="b-cell home-inner red-inner" id="c-3-2"></div>
+        <div class="b-cell home-inner red-inner" id="c-3-3"></div>
+        <div class="b-cell home-inner red-inner" id="c-3-4"></div>
+        <div class="b-cell zone-red"    id="c-3-5"></div>
+        <div class="b-cell track"       id="c-3-6"></div>
+        <div class="b-cell home-stretch stretch-blue" id="c-3-7"></div>
+        <div class="b-cell track"       id="c-3-8"></div>
+        <div class="b-cell zone-blue"   id="c-3-9"></div>
+        <div class="b-cell home-inner blue-inner" id="c-3-10"></div>
+        <div class="b-cell home-inner blue-inner" id="c-3-11"></div>
+        <div class="b-cell home-inner blue-inner" id="c-3-12"></div>
+        <div class="b-cell home-inner blue-inner" id="c-3-13"></div>
+        <div class="b-cell zone-blue"   id="c-3-14"></div>
+
+        <!-- ── ROW 4 ── -->
+        <div class="b-cell zone-red"    id="c-4-0"></div>
+        <div class="b-cell home-inner red-inner" id="c-4-1"></div>
+        <div class="b-cell home-inner red-inner" id="c-4-2"></div>
+        <div class="b-cell home-inner red-inner" id="c-4-3"></div>
+        <div class="b-cell home-inner red-inner" id="c-4-4"></div>
+        <div class="b-cell zone-red"    id="c-4-5"></div>
+        <div class="b-cell track"       id="c-4-6"></div>
+        <div class="b-cell home-stretch stretch-blue" id="c-4-7"></div>
+        <div class="b-cell track"       id="c-4-8"></div>
+        <div class="b-cell zone-blue"   id="c-4-9"></div>
+        <div class="b-cell home-inner blue-inner" id="c-4-10"></div>
+        <div class="b-cell home-inner blue-inner" id="c-4-11"></div>
+        <div class="b-cell home-inner blue-inner" id="c-4-12"></div>
+        <div class="b-cell home-inner blue-inner" id="c-4-13"></div>
+        <div class="b-cell zone-blue"   id="c-4-14"></div>
+
+        <!-- ── ROW 5 ── -->
+        <div class="b-cell zone-red"    id="c-5-0"></div>
+        <div class="b-cell zone-red"    id="c-5-1"></div>
+        <div class="b-cell zone-red"    id="c-5-2"></div>
+        <div class="b-cell zone-red"    id="c-5-3"></div>
+        <div class="b-cell zone-red"    id="c-5-4"></div>
+        <div class="b-cell zone-red"    id="c-5-5"></div>
+        <div class="b-cell track"       id="c-5-6"></div>
+        <div class="b-cell home-stretch stretch-blue" id="c-5-7"></div>
+        <div class="b-cell track"       id="c-5-8"></div>
+        <div class="b-cell zone-blue"   id="c-5-9"></div>
+        <div class="b-cell zone-blue"   id="c-5-10"></div>
+        <div class="b-cell zone-blue"   id="c-5-11"></div>
+        <div class="b-cell zone-blue"   id="c-5-12"></div>
+        <div class="b-cell zone-blue"   id="c-5-13"></div>
+        <div class="b-cell zone-blue"   id="c-5-14"></div>
+
+        <!-- ── ROW 6 (top horizontal corridor) ── -->
+        <div class="b-cell track safe-red"  id="c-6-0"></div>
+        <div class="b-cell track"           id="c-6-1"></div>
+        <div class="b-cell track"           id="c-6-2"></div>
+        <div class="b-cell track"           id="c-6-3"></div>
+        <div class="b-cell track"           id="c-6-4"></div>
+        <div class="b-cell track"           id="c-6-5"></div>
+        <div class="b-cell center-tri tri-red"   id="c-6-6"></div>
+        <div class="b-cell center-mid"      id="c-6-7"></div>
+        <div class="b-cell center-tri tri-blue"  id="c-6-8"></div>
+        <div class="b-cell track"           id="c-6-9"></div>
+        <div class="b-cell track"           id="c-6-10"></div>
+        <div class="b-cell track"           id="c-6-11"></div>
+        <div class="b-cell track"           id="c-6-12"></div>
+        <div class="b-cell track"           id="c-6-13"></div>
+        <div class="b-cell track safe-blue" id="c-6-14"></div>
+
+        <!-- ── ROW 7 (left-right center row) ── -->
+        <div class="b-cell track"           id="c-7-0"></div>
+        <div class="b-cell home-stretch stretch-red" id="c-7-1"></div>
+        <div class="b-cell home-stretch stretch-red" id="c-7-2"></div>
+        <div class="b-cell home-stretch stretch-red" id="c-7-3"></div>
+        <div class="b-cell home-stretch stretch-red" id="c-7-4"></div>
+        <div class="b-cell home-stretch stretch-red" id="c-7-5"></div>
+        <div class="b-cell center-mid"      id="c-7-6"></div>
+        <div class="b-cell center-home"     id="c-7-7"></div>
+        <div class="b-cell center-mid"      id="c-7-8"></div>
+        <div class="b-cell home-stretch stretch-yellow" id="c-7-9"></div>
+        <div class="b-cell home-stretch stretch-yellow" id="c-7-10"></div>
+        <div class="b-cell home-stretch stretch-yellow" id="c-7-11"></div>
+        <div class="b-cell home-stretch stretch-yellow" id="c-7-12"></div>
+        <div class="b-cell home-stretch stretch-yellow" id="c-7-13"></div>
+        <div class="b-cell track"           id="c-7-14"></div>
+
+        <!-- ── ROW 8 (bottom horizontal corridor) ── -->
+        <div class="b-cell track safe-green" id="c-8-0"></div>
+        <div class="b-cell track"            id="c-8-1"></div>
+        <div class="b-cell track"            id="c-8-2"></div>
+        <div class="b-cell track"            id="c-8-3"></div>
+        <div class="b-cell track"            id="c-8-4"></div>
+        <div class="b-cell track"            id="c-8-5"></div>
+        <div class="b-cell center-tri tri-green"  id="c-8-6"></div>
+        <div class="b-cell center-mid"       id="c-8-7"></div>
+        <div class="b-cell center-tri tri-yellow" id="c-8-8"></div>
+        <div class="b-cell track"            id="c-8-9"></div>
+        <div class="b-cell track"            id="c-8-10"></div>
+        <div class="b-cell track"            id="c-8-11"></div>
+        <div class="b-cell track"            id="c-8-12"></div>
+        <div class="b-cell track"            id="c-8-13"></div>
+        <div class="b-cell track safe-yellow" id="c-8-14"></div>
+
+        <!-- ── ROW 9 ── -->
+        <div class="b-cell zone-green"   id="c-9-0"></div>
+        <div class="b-cell zone-green"   id="c-9-1"></div>
+        <div class="b-cell zone-green"   id="c-9-2"></div>
+        <div class="b-cell zone-green"   id="c-9-3"></div>
+        <div class="b-cell zone-green"   id="c-9-4"></div>
+        <div class="b-cell zone-green"   id="c-9-5"></div>
+        <div class="b-cell track"        id="c-9-6"></div>
+        <div class="b-cell home-stretch stretch-green" id="c-9-7"></div>
+        <div class="b-cell track"        id="c-9-8"></div>
+        <div class="b-cell zone-yellow"  id="c-9-9"></div>
+        <div class="b-cell zone-yellow"  id="c-9-10"></div>
+        <div class="b-cell zone-yellow"  id="c-9-11"></div>
+        <div class="b-cell zone-yellow"  id="c-9-12"></div>
+        <div class="b-cell zone-yellow"  id="c-9-13"></div>
+        <div class="b-cell zone-yellow"  id="c-9-14"></div>
+
+        <!-- ── ROW 10 ── -->
+        <div class="b-cell zone-green"   id="c-10-0"></div>
+        <div class="b-cell home-inner green-inner" id="c-10-1"></div>
+        <div class="b-cell home-inner green-inner" id="c-10-2"></div>
+        <div class="b-cell home-inner green-inner" id="c-10-3"></div>
+        <div class="b-cell home-inner green-inner" id="c-10-4"></div>
+        <div class="b-cell zone-green"   id="c-10-5"></div>
+        <div class="b-cell track"        id="c-10-6"></div>
+        <div class="b-cell home-stretch stretch-green" id="c-10-7"></div>
+        <div class="b-cell track"        id="c-10-8"></div>
+        <div class="b-cell zone-yellow"  id="c-10-9"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-10-10"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-10-11"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-10-12"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-10-13"></div>
+        <div class="b-cell zone-yellow"  id="c-10-14"></div>
+
+        <!-- ── ROW 11 ── -->
+        <div class="b-cell zone-green"   id="c-11-0"></div>
+        <div class="b-cell home-inner green-inner" id="c-11-1"></div>
+        <div class="b-cell home-inner green-inner" id="c-11-2"></div>
+        <div class="b-cell home-inner green-inner" id="c-11-3"></div>
+        <div class="b-cell home-inner green-inner" id="c-11-4"></div>
+        <div class="b-cell zone-green"   id="c-11-5"></div>
+        <div class="b-cell track"        id="c-11-6"></div>
+        <div class="b-cell home-stretch stretch-green" id="c-11-7"></div>
+        <div class="b-cell track"        id="c-11-8"></div>
+        <div class="b-cell zone-yellow"  id="c-11-9"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-11-10"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-11-11"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-11-12"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-11-13"></div>
+        <div class="b-cell zone-yellow"  id="c-11-14"></div>
+
+        <!-- ── ROW 12 ── -->
+        <div class="b-cell zone-green"   id="c-12-0"></div>
+        <div class="b-cell home-inner green-inner" id="c-12-1"></div>
+        <div class="b-cell home-inner green-inner" id="c-12-2"></div>
+        <div class="b-cell home-inner green-inner" id="c-12-3"></div>
+        <div class="b-cell home-inner green-inner" id="c-12-4"></div>
+        <div class="b-cell zone-green"   id="c-12-5"></div>
+        <div class="b-cell track"        id="c-12-6"></div>
+        <div class="b-cell home-stretch stretch-green" id="c-12-7"></div>
+        <div class="b-cell track"        id="c-12-8"></div>
+        <div class="b-cell zone-yellow"  id="c-12-9"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-12-10"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-12-11"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-12-12"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-12-13"></div>
+        <div class="b-cell zone-yellow"  id="c-12-14"></div>
+
+        <!-- ── ROW 13 ── -->
+        <div class="b-cell zone-green"   id="c-13-0"></div>
+        <div class="b-cell home-inner green-inner" id="c-13-1"></div>
+        <div class="b-cell home-inner green-inner" id="c-13-2"></div>
+        <div class="b-cell home-inner green-inner" id="c-13-3"></div>
+        <div class="b-cell home-inner green-inner" id="c-13-4"></div>
+        <div class="b-cell zone-green"   id="c-13-5"></div>
+        <div class="b-cell track"        id="c-13-6"></div>
+        <div class="b-cell home-stretch stretch-green" id="c-13-7"></div>
+        <div class="b-cell track"        id="c-13-8"></div>
+        <div class="b-cell zone-yellow"  id="c-13-9"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-13-10"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-13-11"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-13-12"></div>
+        <div class="b-cell home-inner yellow-inner" id="c-13-13"></div>
+        <div class="b-cell zone-yellow"  id="c-13-14"></div>
+
+        <!-- ── ROW 14 ── -->
+        <div class="b-cell zone-green"   id="c-14-0"></div>
+        <div class="b-cell zone-green"   id="c-14-1"></div>
+        <div class="b-cell zone-green"   id="c-14-2"></div>
+        <div class="b-cell zone-green"   id="c-14-3"></div>
+        <div class="b-cell zone-green"   id="c-14-4"></div>
+        <div class="b-cell zone-green"   id="c-14-5"></div>
+        <div class="b-cell track"        id="c-14-6"></div>
+        <div class="b-cell track safe-green" id="c-14-7"></div>
+        <div class="b-cell track"        id="c-14-8"></div>
+        <div class="b-cell zone-yellow"  id="c-14-9"></div>
+        <div class="b-cell zone-yellow"  id="c-14-10"></div>
+        <div class="b-cell zone-yellow"  id="c-14-11"></div>
+        <div class="b-cell zone-yellow"  id="c-14-12"></div>
+        <div class="b-cell zone-yellow"  id="c-14-13"></div>
+        <div class="b-cell zone-yellow"  id="c-14-14"></div>
+
+        <!-- HOME CIRCLES inside corner zones -->
+        <div class="home-circle hc-red"    id="hc-red"></div>
+        <div class="home-circle hc-blue"   id="hc-blue"></div>
+        <div class="home-circle hc-green"  id="hc-green"></div>
+        <div class="home-circle hc-yellow" id="hc-yellow"></div>
+
+        <!-- TOKEN SLOTS inside home circles (absolute positioned by JS) -->
+        <!-- Red tokens -->
+        <div class="token red" id="player1-t1"></div>
+        <div class="token red" id="player1-t2"></div>
+        <div class="token red" id="player1-t3"></div>
+        <div class="token red" id="player1-t4"></div>
+        <!-- Blue tokens -->
+        <div class="token blue" id="player2-t1"></div>
+        <div class="token blue" id="player2-t2"></div>
+        <div class="token blue" id="player2-t3"></div>
+        <div class="token blue" id="player2-t4"></div>
+        <!-- Green tokens -->
+        <div class="token green" id="player3-t1"></div>
+        <div class="token green" id="player3-t2"></div>
+        <div class="token green" id="player3-t3"></div>
+        <div class="token green" id="player3-t4"></div>
+        <!-- Yellow tokens -->
+        <div class="token yellow" id="player4-t1"></div>
+        <div class="token yellow" id="player4-t2"></div>
+        <div class="token yellow" id="player4-t3"></div>
+        <div class="token yellow" id="player4-t4"></div>
+
+    </div><!-- #ludo-board -->
+
+    </div><!-- #game-container -->
+
+    <script type="module" src="room.js"></script>
+
+    </body>
+    </html>
