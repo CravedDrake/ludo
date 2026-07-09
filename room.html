@@ -477,6 +477,19 @@
 
     </div><!-- #game-container -->
 
+    <!-- ╔════════ RESULT / RANKING POPUP ════════╗
+         Hidden by default; shown/filled in by room.js whenever a
+         player finishes all 4 tokens. -->
+    <div class="modal-overlay" id="result-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-icon" id="modal-icon">🏆</div>
+            <h2 class="modal-title" id="modal-title">Player Won!</h2>
+            <div class="modal-ranking" id="modal-ranking"></div>
+            <button class="btn-modal-continue" id="modal-continue-btn" type="button">Continue Game</button>
+            <button class="btn-modal-leave" id="modal-leave-btn" type="button">Leave Game</button>
+        </div>
+    </div>
+
     <script type="module" src="room.js"></script>
 
     </body>

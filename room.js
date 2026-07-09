@@ -47,6 +47,14 @@ const rollDiceBtn   = document.getElementById("roll-dice-btn");
 const diceValueEl   = document.getElementById("dice-value");
 const turnIndicator = document.getElementById("turn-indicator");
 
+/* Result / ranking popup */
+const resultModal      = document.getElementById("result-modal");
+const modalIconEl       = document.getElementById("modal-icon");
+const modalTitleEl      = document.getElementById("modal-title");
+const modalRankingEl    = document.getElementById("modal-ranking");
+const modalContinueBtn  = document.getElementById("modal-continue-btn");
+const modalLeaveBtn     = document.getElementById("modal-leave-btn");
+
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
 
@@ -158,9 +166,13 @@ function getNextPlayerSlot(players = {}) {
     return null;
 }
 
-function getNextTurn(turnOrder, activePlayers, current) {
-    const active = turnOrder.filter(slot => activePlayers[slot]);
-    const index  = active.indexOf(current);
+/* Skips any slot already listed in `finished` (players who have
+   gotten all 4 tokens home have nothing left to do). */
+function getNextTurn(turnOrder, activePlayers, current, finished = []) {
+    const active = turnOrder.filter(slot => activePlayers[slot] && !finished.includes(slot));
+    if (active.length === 0) return current;
+    const index = active.indexOf(current);
+    if (index === -1) return active[0];
     return active[(index + 1) % active.length];
 }
 
@@ -172,6 +184,134 @@ function hasLegalMove(dice, tokens) {
     }
     return false;
 }
+
+/* =========================================================
+   RESULT / RANKING POPUP HELPERS
+========================================================= */
+
+function ordinal(n) {
+    const suffixes = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+}
+
+function hideResultModal() {
+    if (resultModal) resultModal.style.display = "none";
+}
+
+/* Popup shown when a player finishes but others are still playing.
+   Only a "Continue Game" button — dismisses locally, game keeps going. */
+function showInterimModal(slot, rank, players) {
+    if (!resultModal) return;
+    const name = players[slot]?.name || PLAYER_LABELS[slot];
+
+    modalIconEl.textContent  = rank === 1 ? "🏆" : "🎉";
+    modalTitleEl.textContent = rank === 1
+        ? `${name} Won!`
+        : `${name} finished ${ordinal(rank)}!`;
+
+    modalRankingEl.style.display   = "none";
+    modalRankingEl.innerHTML       = "";
+    modalContinueBtn.style.display = "";
+    modalLeaveBtn.style.display    = "none";
+
+    resultModal.style.display = "flex";
+}
+
+/* Popup shown once only one player is left unfinished — the game
+   is over. 2-player games just announce the winner; 3-4 player
+   games show the full numbered / color-coded ranking. Only a
+   "Leave Game" button — no more play after this. */
+function showFinalModal(finalOrder, players) {
+    if (!resultModal) return;
+
+    modalContinueBtn.style.display = "none";
+    modalLeaveBtn.style.display    = "";
+
+    if (finalOrder.length <= 2) {
+        const winner = finalOrder[0];
+        const name   = players[winner]?.name || PLAYER_LABELS[winner];
+        modalIconEl.textContent      = "🏆";
+        modalTitleEl.textContent     = `${name} Won!`;
+        modalRankingEl.style.display = "none";
+        modalRankingEl.innerHTML      = "";
+    } else {
+        modalIconEl.textContent      = "🏁";
+        modalTitleEl.textContent     = "Game Over!";
+        modalRankingEl.style.display = "flex";
+        modalRankingEl.innerHTML      = finalOrder.map((slot, i) => {
+            const name  = players[slot]?.name || PLAYER_LABELS[slot];
+            const color = COLOR_MAP[slot];
+            return `
+                <div class="rank-row">
+                    <span class="rank-number">${i + 1}</span>
+                    <span class="legend-color legend-color--${color}"></span>
+                    <span class="rank-name">${escapeHtml(name)}</span>
+                </div>`;
+        }).join("");
+    }
+
+    resultModal.style.display = "flex";
+}
+
+/* Tracks how many finish-popups we've already shown locally, so the
+   realtime listener doesn't re-show one on every unrelated update.
+   Reset back to 0 whenever a fresh game starts. */
+let lastShownFinishCount = 0;
+
+function handleResultPopups(game, players) {
+    const finishOrder = game.finishOrder || [];
+    const gameOver     = !!game.gameOver;
+    const finalOrder   = game.finalOrder || [];
+
+    if (finishOrder.length === 0 && !gameOver) {
+        lastShownFinishCount = 0;
+        hideResultModal();
+        return;
+    }
+
+    if (gameOver) {
+        showFinalModal(finalOrder, players);
+        lastShownFinishCount = finishOrder.length;
+        return;
+    }
+
+    if (finishOrder.length > lastShownFinishCount) {
+        const rank = finishOrder.length;
+        const slot = finishOrder[rank - 1];
+        showInterimModal(slot, rank, players);
+        lastShownFinishCount = rank;
+    }
+}
+
+/* =========================================================
+   LEAVE ROOM (shared by the sidebar button and the popup button)
+========================================================= */
+
+async function leaveRoom() {
+    const mySlot = getMySlot();
+
+    if (mySlot) {
+        try {
+            await update(roomRef, { [`players/${mySlot}`]: null });
+        } catch (e) {
+            console.warn("Could not remove player from room:", e);
+        }
+    }
+
+    sessionStorage.clear();
+    window.location.href = "index.html";
+}
+
+leaveRoomBtn?.addEventListener("click", leaveRoom);
+modalLeaveBtn?.addEventListener("click", leaveRoom);
+modalContinueBtn?.addEventListener("click", hideResultModal);
 
 /* =========================================================
    COPY ROOM CODE
@@ -194,28 +334,6 @@ copyRoomBtn?.addEventListener("click", async () => {
 
     copyRoomBtn.textContent = "✓ Copied!";
     setTimeout(() => { copyRoomBtn.textContent = "Copy"; }, 2500);
-});
-
-/* =========================================================
-   LEAVE ROOM
-========================================================= */
-
-leaveRoomBtn?.addEventListener("click", async () => {
-    const mySlot = getMySlot();
-
-    if (!mySlot) {
-        window.location.href = "index.html";
-        return;
-    }
-
-    try {
-        await update(roomRef, { [`players/${mySlot}`]: null });
-    } catch (e) {
-        console.warn("Could not remove player from room:", e);
-    }
-
-    sessionStorage.clear();
-    window.location.href = "index.html";
 });
 
 /* =========================================================
@@ -304,6 +422,9 @@ startGameBtn?.addEventListener("click", async () => {
         "game/diceValue":      0,
         "game/diceRolled":     false,
         "game/winner":         null,
+        "game/finishOrder":    [],
+        "game/gameOver":       false,
+        "game/finalOrder":     null,
         "game/tokens/player1": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player2": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player3": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
@@ -330,11 +451,13 @@ rollDiceBtn?.addEventListener("click", async () => {
 
     if (game.currentTurn !== mySlot) return;
     if (game.diceRolled)             return;
+    if (game.gameOver)               return;
 
     const dice = Math.floor(Math.random() * 6) + 1;
 
     if (!hasLegalMove(dice, game.tokens[mySlot])) {
-        const nextTurn = getNextTurn(turnOrder, room.players, mySlot);
+        const finishOrder = game.finishOrder || [];
+        const nextTurn    = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
         await update(roomRef, {
             "game/diceValue":   dice,
             "game/diceRolled":  false,
@@ -367,6 +490,7 @@ async function handleTokenClick(player, tokenKey) {
     if (game.currentTurn !== mySlot) return;
     if (player !== mySlot)           return;
     if (!game.diceRolled)            return;
+    if (game.gameOver)               return;
 
     const dice  = game.diceValue;
     let   index = game.tokens[player][tokenKey].index;
@@ -406,25 +530,54 @@ async function handleTokenClick(player, tokenKey) {
 
     const myTokens = { ...game.tokens[player], [tokenKey]: { index } };
     const allHome  = Object.values(myTokens).every(t => t.index === 56);
-    const nextTurn = getNextTurn(turnOrder, room.players, mySlot);
 
-    /* Rolling a 6 or capturing a token grants another turn */
+    /* ---- Finish-order / ranking bookkeeping ---- */
+    const prevFinishOrder = game.finishOrder || [];
+    const finishOrder = (allHome && !prevFinishOrder.includes(player))
+        ? [...prevFinishOrder, player]
+        : prevFinishOrder;
+
+    const activeSlots     = turnOrder.filter(slot => room.players[slot]);
+    const remainingActive = activeSlots.filter(slot => !finishOrder.includes(slot));
+
+    let gameOver   = false;
+    let finalOrder = finishOrder;
+
+    if (remainingActive.length <= 1) {
+        gameOver   = true;
+        finalOrder = remainingActive.length === 1
+            ? [...finishOrder, remainingActive[0]]
+            : finishOrder;
+    }
+
     const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0;
+
+    let nextTurn;
+    if (gameOver) {
+        nextTurn = null;
+    } else if (allHome) {
+        /* This player just finished — hand off to the next player
+           still in the game, ignore any "extra turn" they'd have earned. */
+        nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+    } else {
+        nextTurn = grantsExtraTurn
+            ? mySlot
+            : getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+    }
 
     const moveUpdates = {
         ...captureUpdates,
         [`game/tokens/${player}/${tokenKey}/index`]: index,
         "game/diceValue":   0,
         "game/diceRolled":  false,
-        "game/currentTurn": allHome ? mySlot : (grantsExtraTurn ? mySlot : nextTurn),
-        "game/winner":      allHome ? mySlot : null
+        "game/currentTurn": nextTurn,
+        "game/finishOrder": finishOrder,
+        "game/gameOver":    gameOver,
+        "game/finalOrder":  gameOver ? finalOrder : null,
+        "game/winner":      gameOver ? finalOrder[0] : null
     };
 
     await update(roomRef, moveUpdates);
-
-    if (allHome) {
-        alert(`🎉 ${room.players[mySlot].name} wins!`);
-    }
 }
 
 /* =========================================================
@@ -479,6 +632,7 @@ onValue(roomRef, (snap) => {
 
     if (room.status === "playing" && room.game) {
         showGameUI(room, players);
+        handleResultPopups(room.game, players);
     }
 });
 
@@ -494,21 +648,22 @@ function showGameUI(room, players) {
     const mySlot   = getMySlot();
     const isMeTurn = game.currentTurn === mySlot;
 
-    diceValueEl.textContent   = game.diceValue || "–";
-    turnIndicator.textContent = `${PLAYER_LABELS[game.currentTurn]}'s turn${isMeTurn ? " (You!)" : ""}`;
+    diceValueEl.textContent = game.diceValue || "–";
 
-    rollDiceBtn.disabled      = !isMeTurn || game.diceRolled;
-    rollDiceBtn.style.opacity = rollDiceBtn.disabled ? "0.4" : "1";
+    if (game.gameOver) {
+        turnIndicator.textContent = "🏁 Game Over!";
+        rollDiceBtn.disabled      = true;
+        rollDiceBtn.style.opacity = "0.4";
+    } else {
+        turnIndicator.textContent = `${PLAYER_LABELS[game.currentTurn]}'s turn${isMeTurn ? " (You!)" : ""}`;
+        rollDiceBtn.disabled       = !isMeTurn || game.diceRolled;
+        rollDiceBtn.style.opacity  = rollDiceBtn.disabled ? "0.4" : "1";
+    }
 
     renderTokens(game);
     wireTokenClicks(game, mySlot);
     updatePlayerLegend(players, game.currentTurn, game.winner);
     updateHomeLabels(players);
-
-    if (game.winner) {
-        const winnerName = players[game.winner]?.name || game.winner;
-        turnIndicator.textContent = `🏆 ${winnerName} wins!`;
-    }
 }
 
 /* =========================================================
