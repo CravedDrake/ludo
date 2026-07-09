@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
     <html lang="en">
     <head>
     <meta charset="UTF-8" />
@@ -119,6 +119,27 @@
 
     <div class="game-header">
         <div id="turn-indicator"></div>
+
+        <!-- PLAYER LEGEND — color swatch beside each player's name -->
+        <div class="player-legend" id="player-legend">
+        <div class="legend-item legend-item--empty" id="legend-player1" data-slot="player1">
+            <span class="legend-color legend-color--red"></span>
+            <span class="legend-name" id="legend-player1-name">Red</span>
+        </div>
+        <div class="legend-item legend-item--empty" id="legend-player2" data-slot="player2">
+            <span class="legend-color legend-color--blue"></span>
+            <span class="legend-name" id="legend-player2-name">Blue</span>
+        </div>
+        <div class="legend-item legend-item--empty" id="legend-player3" data-slot="player3">
+            <span class="legend-color legend-color--green"></span>
+            <span class="legend-name" id="legend-player3-name">Green</span>
+        </div>
+        <div class="legend-item legend-item--empty" id="legend-player4" data-slot="player4">
+            <span class="legend-color legend-color--yellow"></span>
+            <span class="legend-name" id="legend-player4-name">Yellow</span>
+        </div>
+        </div>
+
         <div class="dice-row">
         <button id="roll-dice-btn" type="button">🎲 Roll Dice</button>
         <div id="dice-value">–</div>
@@ -168,7 +189,7 @@
         <!-- track col 6 -->
         <div class="b-cell track"       id="c-0-6"></div>
         <!-- blue home cols 7-8 blank fillers for row 0 become track -->
-        <div class="b-cell track safe-blue" id="c-0-7"></div>
+        <div class="b-cell track" id="c-0-7"></div>
         <div class="b-cell track"       id="c-0-8"></div>
         <!-- Blue home zone rows 0-5, cols 9-14 -->
         <div class="b-cell zone-blue"   id="c-0-9"></div>
@@ -187,7 +208,7 @@
         <div class="b-cell zone-red"    id="c-1-5"></div>
         <div class="b-cell track"       id="c-1-6"></div>
         <div class="b-cell home-stretch stretch-blue" id="c-1-7"></div>
-        <div class="b-cell track"       id="c-1-8"></div>
+        <div class="b-cell track safe-blue" id="c-1-8"></div>
         <div class="b-cell zone-blue"   id="c-1-9"></div>
         <div class="b-cell home-inner blue-inner" id="c-1-10"></div>
         <div class="b-cell home-inner blue-inner" id="c-1-11"></div>
@@ -202,7 +223,7 @@
         <div class="b-cell home-inner red-inner" id="c-2-3"></div>
         <div class="b-cell home-inner red-inner" id="c-2-4"></div>
         <div class="b-cell zone-red"    id="c-2-5"></div>
-        <div class="b-cell track"       id="c-2-6"></div>
+        <div class="b-cell track safe-neutral" id="c-2-6"></div>
         <div class="b-cell home-stretch stretch-blue" id="c-2-7"></div>
         <div class="b-cell track"       id="c-2-8"></div>
         <div class="b-cell zone-blue"   id="c-2-9"></div>
@@ -264,8 +285,8 @@
         <div class="b-cell zone-blue"   id="c-5-14"></div>
 
         <!-- ── ROW 6 (top horizontal corridor) ── -->
-        <div class="b-cell track safe-red"  id="c-6-0"></div>
-        <div class="b-cell track"           id="c-6-1"></div>
+        <div class="b-cell track"           id="c-6-0"></div>
+        <div class="b-cell track safe-red"  id="c-6-1"></div>
         <div class="b-cell track"           id="c-6-2"></div>
         <div class="b-cell track"           id="c-6-3"></div>
         <div class="b-cell track"           id="c-6-4"></div>
@@ -276,9 +297,9 @@
         <div class="b-cell track"           id="c-6-9"></div>
         <div class="b-cell track"           id="c-6-10"></div>
         <div class="b-cell track"           id="c-6-11"></div>
-        <div class="b-cell track"           id="c-6-12"></div>
+        <div class="b-cell track safe-neutral" id="c-6-12"></div>
         <div class="b-cell track"           id="c-6-13"></div>
-        <div class="b-cell track safe-blue" id="c-6-14"></div>
+        <div class="b-cell track"           id="c-6-14"></div>
 
         <!-- ── ROW 7 (left-right center row) ── -->
         <div class="b-cell track"           id="c-7-0"></div>
@@ -298,9 +319,9 @@
         <div class="b-cell track"           id="c-7-14"></div>
 
         <!-- ── ROW 8 (bottom horizontal corridor) ── -->
-        <div class="b-cell track safe-green" id="c-8-0"></div>
+        <div class="b-cell track"            id="c-8-0"></div>
         <div class="b-cell track"            id="c-8-1"></div>
-        <div class="b-cell track"            id="c-8-2"></div>
+        <div class="b-cell track safe-neutral" id="c-8-2"></div>
         <div class="b-cell track"            id="c-8-3"></div>
         <div class="b-cell track"            id="c-8-4"></div>
         <div class="b-cell track"            id="c-8-5"></div>
@@ -311,8 +332,8 @@
         <div class="b-cell track"            id="c-8-10"></div>
         <div class="b-cell track"            id="c-8-11"></div>
         <div class="b-cell track"            id="c-8-12"></div>
-        <div class="b-cell track"            id="c-8-13"></div>
-        <div class="b-cell track safe-yellow" id="c-8-14"></div>
+        <div class="b-cell track safe-yellow" id="c-8-13"></div>
+        <div class="b-cell track"            id="c-8-14"></div>
 
         <!-- ── ROW 9 ── -->
         <div class="b-cell zone-green"   id="c-9-0"></div>
@@ -374,7 +395,7 @@
         <div class="b-cell zone-green"   id="c-12-5"></div>
         <div class="b-cell track"        id="c-12-6"></div>
         <div class="b-cell home-stretch stretch-green" id="c-12-7"></div>
-        <div class="b-cell track"        id="c-12-8"></div>
+        <div class="b-cell track safe-neutral" id="c-12-8"></div>
         <div class="b-cell zone-yellow"  id="c-12-9"></div>
         <div class="b-cell home-inner yellow-inner" id="c-12-10"></div>
         <div class="b-cell home-inner yellow-inner" id="c-12-11"></div>
@@ -389,7 +410,7 @@
         <div class="b-cell home-inner green-inner" id="c-13-3"></div>
         <div class="b-cell home-inner green-inner" id="c-13-4"></div>
         <div class="b-cell zone-green"   id="c-13-5"></div>
-        <div class="b-cell track"        id="c-13-6"></div>
+        <div class="b-cell track safe-green" id="c-13-6"></div>
         <div class="b-cell home-stretch stretch-green" id="c-13-7"></div>
         <div class="b-cell track"        id="c-13-8"></div>
         <div class="b-cell zone-yellow"  id="c-13-9"></div>
@@ -407,7 +428,7 @@
         <div class="b-cell zone-green"   id="c-14-4"></div>
         <div class="b-cell zone-green"   id="c-14-5"></div>
         <div class="b-cell track"        id="c-14-6"></div>
-        <div class="b-cell track safe-green" id="c-14-7"></div>
+        <div class="b-cell track" id="c-14-7"></div>
         <div class="b-cell track"        id="c-14-8"></div>
         <div class="b-cell zone-yellow"  id="c-14-9"></div>
         <div class="b-cell zone-yellow"  id="c-14-10"></div>
@@ -421,6 +442,14 @@
         <div class="home-circle hc-blue"   id="hc-blue"></div>
         <div class="home-circle hc-green"  id="hc-green"></div>
         <div class="home-circle hc-yellow" id="hc-yellow"></div>
+
+        <!-- PLAYER NAME LABELS — sit on the outer edge of each corner zone,
+             beside/above that color's home circle, showing who is playing
+             that color. Filled in by updateHomeLabels() in room.js. -->
+        <div class="home-name-label label-red"    id="home-name-red"></div>
+        <div class="home-name-label label-blue"   id="home-name-blue"></div>
+        <div class="home-name-label label-green"  id="home-name-green"></div>
+        <div class="home-name-label label-yellow" id="home-name-yellow"></div>
 
         <!-- TOKEN SLOTS inside home circles (absolute positioned by JS) -->
         <!-- Red tokens -->

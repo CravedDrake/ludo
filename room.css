@@ -267,6 +267,63 @@ body {
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
+/* ── Player legend — color swatch + name, shown during play ──── */
+.player-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--r-full);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  transition: background var(--ease), border-color var(--ease), box-shadow var(--ease), opacity var(--ease);
+}
+
+.legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.12);
+}
+.legend-color--red    { background: var(--red); }
+.legend-color--blue   { background: var(--blue); }
+.legend-color--green  { background: var(--green); }
+.legend-color--yellow { background: var(--yellow); }
+
+.legend-name { white-space: nowrap; }
+
+/* Empty seat — no player joined this color */
+.legend-item--empty {
+  opacity: 0.35;
+  border-style: dashed;
+}
+
+/* Highlight whoever's turn it currently is */
+.legend-item--turn {
+  border-color: var(--accent-light);
+  background: rgba(139,92,246,0.18);
+  box-shadow: 0 0 16px rgba(139,92,246,0.4);
+}
+
+/* Winner call-out */
+.legend-item--winner {
+  border-color: var(--yellow);
+  background: rgba(234,179,8,0.18);
+  box-shadow: 0 0 16px rgba(234,179,8,0.4);
+}
+
 
 /* ================================================================
    LUDO BOARD — 15×15 CSS grid
@@ -331,6 +388,22 @@ body {
 .safe-blue::before   { color: var(--blue); }
 .safe-green::before  { color: var(--green); }
 .safe-yellow::before { color: var(--yellow); }
+
+/* Colorless safe cells — the shared merge-point squares just before
+   each color's home stretch. Safe for anyone, so no color tint;
+   plain white/grey star instead. */
+.safe-neutral {
+  background: rgba(255,255,255,0.14);
+}
+.safe-neutral::before {
+  content: '★';
+  position: absolute;
+  font-size: clamp(8px, 1.5vw, 14px);
+  opacity: 0.55;
+  pointer-events: none;
+  z-index: 1;
+  color: var(--text);
+}
 
 /* ── Home stretch (colored lanes leading to center) ───────────── */
 .home-stretch { border-color: rgba(255,255,255,0.12); }
@@ -408,6 +481,63 @@ body {
   box-shadow: 0 0 20px rgba(234,179,8,0.2);
 }
 
+/* ── Player name labels ───────────────────────────────────────── */
+/* Small color-tinted banners sitting on the outer edge of each
+   corner zone (row/col 0 or 14) — outside the home circle and
+   parked tokens, so they never get covered. Filled in by
+   updateHomeLabels() in room.js with the name of whoever is
+   playing that color, right beside that color's own zone. */
+.home-name-label {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: clamp(8px, 1.8vw, 12px);
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  pointer-events: none;
+  padding: 2px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.label-red {
+  top: 0;
+  left: 0;
+  width:  calc(100% / 15 * 6);
+  height: calc(100% / 15 * 1);
+  background: rgba(239, 68, 68, 0.55);
+  border-bottom-right-radius: 8px;
+}
+.label-blue {
+  top: 0;
+  left: calc(100% / 15 * 9);
+  width:  calc(100% / 15 * 6);
+  height: calc(100% / 15 * 1);
+  background: rgba(59,130,246, 0.55);
+  border-bottom-left-radius: 8px;
+}
+.label-green {
+  top: calc(100% / 15 * 14);
+  left: 0;
+  width:  calc(100% / 15 * 6);
+  height: calc(100% / 15 * 1);
+  background: rgba(34,197,94, 0.55);
+  border-top-right-radius: 8px;
+}
+.label-yellow {
+  top: calc(100% / 15 * 14);
+  left: calc(100% / 15 * 9);
+  width:  calc(100% / 15 * 6);
+  height: calc(100% / 15 * 1);
+  background: rgba(234,179,8, 0.55);
+  border-top-left-radius: 8px;
+}
+
 /* ── Tokens ───────────────────────────────────────────────────── */
 .token {
   width:  clamp(12px, 2.8vw, 22px);
@@ -463,6 +593,8 @@ body {
   .btn-leave, .btn-start { width: 100%; text-align: center; }
   .player-slot { padding: var(--sp-3); gap: var(--sp-3); }
   .player-slot__color { width: 36px; height: 36px; }
+  .legend-item { font-size: 0.78rem; padding: 5px 10px; }
+  .home-name-label { font-size: 7px; }
 }
 @media (max-width: 360px) {
   body { padding: var(--sp-3) var(--sp-2); }
