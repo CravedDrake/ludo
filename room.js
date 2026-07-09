@@ -22,9 +22,6 @@ const roomRef = ref(db, "rooms/" + roomCode);
 
 /* =========================================================
    SESSION — who am I?
-   BUG FIX: read playerSlot AFTER the page loads, not once at
-   module-top-level before join can set it.  We use a getter
-   so every call always reflects the latest sessionStorage value.
 ========================================================= */
 
 function getMySlot() {
@@ -45,36 +42,64 @@ const leaveRoomBtn  = document.getElementById("leave-room-btn");
 const copyRoomBtn   = document.getElementById("copy-room-btn");
 const waitingMsg    = document.getElementById("waiting-message");
 
-const gameContainer   = document.getElementById("game-container");
-const tokensContainer = document.getElementById("tokens-container");
-const rollDiceBtn     = document.getElementById("roll-dice-btn");
-const diceValueEl     = document.getElementById("dice-value");
-const turnIndicator   = document.getElementById("turn-indicator");
+const gameContainer = document.getElementById("game-container");
+const rollDiceBtn   = document.getElementById("roll-dice-btn");
+const diceValueEl   = document.getElementById("dice-value");
+const turnIndicator = document.getElementById("turn-indicator");
 
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
 
 /* =========================================================
-   BOARD PATH
-   52-cell main track (indices 0–51)
+   BOARD PATH — matches the real 15x15 grid in room.html
+   (cell ids are "c-ROW-COL")
+
+   This is the 52-cell shared outer track, traced clockwise
+   starting at Red's launch square (6,1).
 ========================================================= */
 
-const MAIN_PATH = Array.from({ length: 52 }, (_, i) => i);
+const TRACK_PATH = [
+    [6,1],[6,2],[6,3],[6,4],[6,5],
+    [5,6],[4,6],[3,6],[2,6],[1,6],[0,6],
+    [0,7],
+    [0,8],
+    [1,8],[2,8],[3,8],[4,8],[5,8],
+    [6,9],[6,10],[6,11],[6,12],[6,13],[6,14],
+    [7,14],
+    [8,14],
+    [8,13],[8,12],[8,11],[8,10],[8,9],
+    [9,8],[10,8],[11,8],[12,8],[13,8],[14,8],
+    [14,7],
+    [14,6],
+    [13,6],[12,6],[11,6],[10,6],[9,6],
+    [8,5],[8,4],[8,3],[8,2],[8,1],[8,0],
+    [7,0],
+    [6,0]
+]; // 52 entries, indices 0-51
 
-/* Safe cells — tokens here can't be captured */
-const SAFE_CELLS = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
-
-/* Home base cell IDs per player (for rendering parked tokens) */
-const HOME_CELLS = {
-    player1: ["home-r1", "home-r2", "home-r3", "home-r4"],
-    player2: ["home-b1", "home-b2", "home-b3", "home-b4"],
-    player3: ["home-g1", "home-g2", "home-g3", "home-g4"],
-    player4: ["home-y1", "home-y2", "home-y3", "home-y4"]
+/* Where each color enters the shared track (13 cells apart) */
+const START_OFFSET = {
+    player1: 0,   // red
+    player2: 13,  // blue
+    player3: 39,  // green
+    player4: 26   // yellow
 };
 
-/* =========================================================
-   HELPERS
-========================================================= */
+/* Each color's 5-cell home stretch, ordered from the branch point to the center */
+const HOME_STRETCH = {
+    player1: [[7,1],[7,2],[7,3],[7,4],[7,5]],       // red
+    player2: [[1,7],[2,7],[3,7],[4,7],[5,7]],       // blue
+    player3: [[13,7],[12,7],[11,7],[10,7],[9,7]],   // green
+    player4: [[7,13],[7,12],[7,11],[7,10],[7,9]]    // yellow
+};
+
+/* Where tokens sit while parked at home (before rolling a 6) */
+const HOME_PARK_CELLS = {
+    player1: ["c-2-2", "c-2-3", "c-3-2", "c-3-3"],
+    player2: ["c-2-11", "c-2-12", "c-3-11", "c-3-12"],
+    player3: ["c-11-2", "c-11-3", "c-12-2", "c-12-3"],
+    player4: ["c-11-11", "c-11-12", "c-12-11", "c-12-12"]
+};
 
 const COLOR_MAP = {
     player1: "red",
@@ -90,6 +115,41 @@ const PLAYER_LABELS = {
     player4: "Yellow"
 };
 
+/* Safe cells: every color's own launch square, plus the square just
+   before each color turns into its home stretch. Tokens here can't
+   be captured. */
+const SAFE_CELLS = new Set();
+for (const p of Object.keys(START_OFFSET)) {
+    const offset = START_OFFSET[p];
+    const start  = TRACK_PATH[offset];
+    const branch = TRACK_PATH[(offset + 50) % 52];
+    SAFE_CELLS.add(start.join(","));
+    SAFE_CELLS.add(branch.join(","));
+}
+
+/* relative token index meaning:
+   -1        => parked at home
+   0-50      => position on this color's 51-cell shared stretch
+   51-55     => on this color's 5-cell home stretch
+   56        => finished (home)
+*/
+
+function getAbsoluteCoord(player, relative) {
+    if (relative >= 0 && relative <= 50) {
+        const idx = (START_OFFSET[player] + relative) % 52;
+        return TRACK_PATH[idx];
+    }
+    if (relative >= 51 && relative <= 55) {
+        return HOME_STRETCH[player][relative - 51];
+    }
+    return null; // finished
+}
+
+function getCellEl(coord) {
+    if (!coord) return null;
+    return document.getElementById(`c-${coord[0]}-${coord[1]}`);
+}
+
 function getNextPlayerSlot(players = {}) {
     if (!players.player2) return "player2";
     if (!players.player3) return "player3";
@@ -97,21 +157,23 @@ function getNextPlayerSlot(players = {}) {
     return null;
 }
 
-/*
-  BUG FIX: turn order is now driven by the explicit `turnOrder` array
-  stored in Firebase (written in script.js), NOT Object.keys() which
-  Firebase returns in an unspecified order.
-*/
 function getNextTurn(turnOrder, activePlayers, current) {
-    /* Only cycle through players who are actually in the game */
     const active = turnOrder.filter(slot => activePlayers[slot]);
     const index  = active.indexOf(current);
     return active[(index + 1) % active.length];
 }
 
+function hasLegalMove(dice, tokens) {
+    for (const key in tokens) {
+        const idx = tokens[key].index;
+        if (idx === -1 && dice === 6) return true;
+        if (idx >= 0 && idx !== 56 && idx + dice <= 56) return true;
+    }
+    return false;
+}
+
 /* =========================================================
    COPY ROOM CODE
-   BUG FIX: copy-room-btn had no listener
 ========================================================= */
 
 copyRoomBtn?.addEventListener("click", async () => {
@@ -121,7 +183,6 @@ copyRoomBtn?.addEventListener("click", async () => {
     try {
         await navigator.clipboard.writeText(roomUrl);
     } catch {
-        /* Fallback for older browsers */
         const tmp = document.createElement("input");
         tmp.value = roomUrl;
         document.body.appendChild(tmp);
@@ -136,7 +197,6 @@ copyRoomBtn?.addEventListener("click", async () => {
 
 /* =========================================================
    LEAVE ROOM
-   BUG FIX: leave-room-btn had no listener at all
 ========================================================= */
 
 leaveRoomBtn?.addEventListener("click", async () => {
@@ -148,10 +208,7 @@ leaveRoomBtn?.addEventListener("click", async () => {
     }
 
     try {
-        /* Remove this player from the room */
-        await update(roomRef, {
-            [`players/${mySlot}`]: null
-        });
+        await update(roomRef, { [`players/${mySlot}`]: null });
     } catch (e) {
         console.warn("Could not remove player from room:", e);
     }
@@ -162,8 +219,6 @@ leaveRoomBtn?.addEventListener("click", async () => {
 
 /* =========================================================
    JOIN ROOM
-   BUG FIX: sessionStorage.setItem now happens before joinCard
-   is hidden, ensuring getMySlot() works for all subsequent calls.
 ========================================================= */
 
 joinBtn?.addEventListener("click", joinRoom);
@@ -176,8 +231,8 @@ async function joinRoom() {
         return;
     }
 
-    joinBtn.disabled     = true;
-    joinBtn.textContent  = "Joining…";
+    joinBtn.disabled    = true;
+    joinBtn.textContent = "Joining…";
 
     try {
         const snap = await get(roomRef);
@@ -212,7 +267,6 @@ async function joinRoom() {
             }
         });
 
-        /* BUG FIX: set slot BEFORE hiding join card */
         sessionStorage.setItem("playerSlot", slot);
         sessionStorage.setItem("playerName", name);
 
@@ -228,8 +282,6 @@ async function joinRoom() {
 
 /* =========================================================
    START GAME
-   BUG FIX: anyone could trigger this — now checks isHost.
-   Also resets diceRolled flag properly.
 ========================================================= */
 
 startGameBtn?.addEventListener("click", async () => {
@@ -243,15 +295,14 @@ startGameBtn?.addEventListener("click", async () => {
     const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
     const active    = turnOrder.filter(s => players[s]);
 
-    /* Pick a random first turn from active players */
     const firstTurn = active[Math.floor(Math.random() * active.length)];
 
     await update(roomRef, {
-        status:               "playing",
-        "game/currentTurn":   firstTurn,
-        "game/diceValue":     0,
-        "game/diceRolled":    false,
-        "game/winner":        null,
+        status:                "playing",
+        "game/currentTurn":    firstTurn,
+        "game/diceValue":      0,
+        "game/diceRolled":     false,
+        "game/winner":         null,
         "game/tokens/player1": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player2": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player3": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
@@ -261,7 +312,8 @@ startGameBtn?.addEventListener("click", async () => {
 
 /* =========================================================
    DICE ROLL
-   BUG FIX: prevent rolling again if dice already rolled this turn
+   Auto-skips the turn if the roll leaves no legal move,
+   so the game can never soft-lock on a bad roll.
 ========================================================= */
 
 rollDiceBtn?.addEventListener("click", async () => {
@@ -271,13 +323,24 @@ rollDiceBtn?.addEventListener("click", async () => {
     const snap = await get(roomRef);
     if (!snap.exists()) return;
 
-    const room = snap.val();
-    const game = room.game;
+    const room      = snap.val();
+    const game      = room.game;
+    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
 
-    if (game.currentTurn !== mySlot) return;   /* not my turn */
-    if (game.diceRolled)             return;   /* already rolled */
+    if (game.currentTurn !== mySlot) return;
+    if (game.diceRolled)             return;
 
     const dice = Math.floor(Math.random() * 6) + 1;
+
+    if (!hasLegalMove(dice, game.tokens[mySlot])) {
+        const nextTurn = getNextTurn(turnOrder, room.players, mySlot);
+        await update(roomRef, {
+            "game/diceValue":   dice,
+            "game/diceRolled":  false,
+            "game/currentTurn": nextTurn
+        });
+        return;
+    }
 
     await update(roomRef, {
         "game/diceValue":  dice,
@@ -287,9 +350,6 @@ rollDiceBtn?.addEventListener("click", async () => {
 
 /* =========================================================
    MOVE + CAPTURE SYSTEM
-   BUG FIX: use turnOrder from Firebase for getNextTurn.
-   BUG FIX: reset diceRolled on turn advance.
-   BUG FIX: check for win condition (all 4 tokens at index 51).
 ========================================================= */
 
 async function handleTokenClick(player, tokenKey) {
@@ -303,14 +363,15 @@ async function handleTokenClick(player, tokenKey) {
     const game      = room.game;
     const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
 
-    if (game.currentTurn !== mySlot) return;   /* not my turn */
-    if (player !== mySlot)           return;   /* not my token */
-    if (!game.diceRolled)            return;   /* must roll first */
+    if (game.currentTurn !== mySlot) return;
+    if (player !== mySlot)           return;
+    if (!game.diceRolled)            return;
 
     const dice  = game.diceValue;
     let   index = game.tokens[player][tokenKey].index;
 
-    /* Leave home only on a 6 */
+    if (index === 56) return; // already home
+
     if (index === -1) {
         if (dice !== 6) return;
         index = 0;
@@ -318,36 +379,43 @@ async function handleTokenClick(player, tokenKey) {
         index += dice;
     }
 
-    /* Can't go past the end of the track */
-    if (index > MAIN_PATH.length - 1) return;
+    if (index > 56) return; // overshoot, illegal move
 
-    const boardPos = MAIN_PATH[index];
-
-    /* CAPTURE — knock off opponent tokens on non-safe cells */
     const captureUpdates = {};
 
-    if (!SAFE_CELLS.has(boardPos)) {
-        for (const p in game.tokens) {
-            if (p === player) continue;
-            for (const t in game.tokens[p]) {
-                if (game.tokens[p][t].index === index) {
-                    captureUpdates[`game/tokens/${p}/${t}/index`] = -1;
+    /* Only cells on the shared track (0-50) are capturable */
+    if (index >= 0 && index <= 50) {
+        const [row, col] = getAbsoluteCoord(player, index);
+        const landingKey = `${row},${col}`;
+
+        if (!SAFE_CELLS.has(landingKey)) {
+            for (const p in game.tokens) {
+                if (p === player) continue;
+                for (const t in game.tokens[p]) {
+                    const theirIndex = game.tokens[p][t].index;
+                    if (theirIndex < 0 || theirIndex > 50) continue;
+                    const theirCoord = getAbsoluteCoord(p, theirIndex);
+                    if (theirCoord[0] === row && theirCoord[1] === col) {
+                        captureUpdates[`game/tokens/${p}/${t}/index`] = -1;
+                    }
                 }
             }
         }
     }
 
-    /* Check win: all 4 tokens at final cell (index 51) */
-    const myTokens     = { ...game.tokens[player], [tokenKey]: { index } };
-    const allHome      = Object.values(myTokens).every(t => t.index === MAIN_PATH.length - 1);
-    const nextTurn     = getNextTurn(turnOrder, room.players, mySlot);
+    const myTokens = { ...game.tokens[player], [tokenKey]: { index } };
+    const allHome  = Object.values(myTokens).every(t => t.index === 56);
+    const nextTurn = getNextTurn(turnOrder, room.players, mySlot);
+
+    /* Rolling a 6 or capturing a token grants another turn */
+    const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0;
 
     const moveUpdates = {
         ...captureUpdates,
         [`game/tokens/${player}/${tokenKey}/index`]: index,
-        "game/diceValue":  0,
-        "game/diceRolled": false,
-        "game/currentTurn": allHome ? mySlot : nextTurn,
+        "game/diceValue":   0,
+        "game/diceRolled":  false,
+        "game/currentTurn": allHome ? mySlot : (grantsExtraTurn ? mySlot : nextTurn),
         "game/winner":      allHome ? mySlot : null
     };
 
@@ -369,22 +437,17 @@ onValue(roomRef, (snap) => {
     const players = room.players || {};
     const mySlot  = getMySlot();
 
-    /* ── Player list ── */
     updatePlayerSlots(players);
 
-    /* ── Join card visibility ── */
     if (mySlot) {
-        /* Already in the room — hide join card */
         if (joinCard) joinCard.style.display = "none";
     } else {
-        /* Check if room is full */
         const filled = Object.keys(players).length;
         if (room.maxPlayers && filled >= room.maxPlayers && joinCard) {
             joinCard.style.display = "none";
         }
     }
 
-    /* ── Start button: only show & enable for host when room has ≥2 players ── */
     if (startGameBtn) {
         if (!isHost || room.status === "playing") {
             startGameBtn.style.display = "none";
@@ -401,7 +464,6 @@ onValue(roomRef, (snap) => {
         }
     }
 
-    /* ── Waiting message ── */
     if (waitingMsg) {
         const count = Object.keys(players).length;
         const max   = room.maxPlayers || 4;
@@ -414,7 +476,6 @@ onValue(roomRef, (snap) => {
         }
     }
 
-    /* ── Switch to game view when playing ── */
     if (room.status === "playing" && room.game) {
         showGameUI(room, players);
     }
@@ -422,36 +483,25 @@ onValue(roomRef, (snap) => {
 
 /* =========================================================
    SHOW GAME UI
-   BUG FIX: game-container and tokens-container were never revealed
 ========================================================= */
 
 function showGameUI(room, players) {
-    /* Hide waiting-room UI */
-    document.querySelector(".page").style.display       = "none";
+    document.querySelector(".page").style.display = "none";
+    gameContainer.style.display = "block";
 
-    /* Show game UI */
-    gameContainer.style.display   = "block";
-    tokensContainer.style.display = "block";
-
-    const game    = room.game;
-    const mySlot  = getMySlot();
+    const game     = room.game;
+    const mySlot   = getMySlot();
     const isMeTurn = game.currentTurn === mySlot;
 
-    /* Dice & turn info */
-    diceValueEl.textContent  = game.diceValue || "–";
+    diceValueEl.textContent   = game.diceValue || "–";
     turnIndicator.textContent = `${PLAYER_LABELS[game.currentTurn]}'s turn${isMeTurn ? " (You!)" : ""}`;
 
-    /* Roll button state */
     rollDiceBtn.disabled      = !isMeTurn || game.diceRolled;
     rollDiceBtn.style.opacity = rollDiceBtn.disabled ? "0.4" : "1";
 
-    /* Render tokens */
     renderTokens(game);
-
-    /* Wire token click handlers */
     wireTokenClicks(game, mySlot);
 
-    /* Winner banner */
     if (game.winner) {
         const winnerName = players[game.winner]?.name || game.winner;
         turnIndicator.textContent = `🏆 ${winnerName} wins!`;
@@ -459,16 +509,13 @@ function showGameUI(room, players) {
 }
 
 /* =========================================================
-   RENDER TOKENS
-   BUG FIX: tokens at index -1 (home) were skipped — they
-   disappeared from the DOM entirely when the game started.
-   Now home-base tokens are placed in their home cells.
+   RENDER TOKENS — placed onto the real c-ROW-COL grid cells
 ========================================================= */
 
 function renderTokens(game) {
     for (const player in game.tokens) {
         const tokenKeys = Object.keys(game.tokens[player]);
-        let   homeIndex = 0;
+        let   homeSlot  = 0;
 
         for (const tokenKey of tokenKeys) {
             const el = document.getElementById(`${player}-${tokenKey}`);
@@ -477,17 +524,16 @@ function renderTokens(game) {
             const index = game.tokens[player][tokenKey].index;
 
             if (index === -1) {
-                /* Place in home base */
-                const homeCellId = HOME_CELLS[player]?.[homeIndex];
-                homeIndex++;
-                if (homeCellId) {
-                    const homeCell = document.getElementById(homeCellId);
-                    if (homeCell) homeCell.appendChild(el);
-                }
+                const cellId = HOME_PARK_CELLS[player]?.[homeSlot];
+                homeSlot++;
+                const cell = cellId ? document.getElementById(cellId) : null;
+                if (cell) cell.appendChild(el);
+            } else if (index === 56) {
+                const homeCircle = document.getElementById(`hc-${COLOR_MAP[player]}`);
+                if (homeCircle) homeCircle.appendChild(el);
             } else {
-                /* Place on main track */
-                const cellId = MAIN_PATH[index];
-                const cell   = document.getElementById("cell-" + cellId);
+                const coord = getAbsoluteCoord(player, index);
+                const cell  = getCellEl(coord);
                 if (cell) cell.appendChild(el);
             }
         }
@@ -496,12 +542,9 @@ function renderTokens(game) {
 
 /* =========================================================
    WIRE TOKEN CLICKS
-   BUG FIX: token elements were never made clickable.
-   Only the current player's tokens get a click handler.
 ========================================================= */
 
 function wireTokenClicks(game, mySlot) {
-    /* Remove all existing handlers first to avoid duplicates */
     document.querySelectorAll(".token").forEach(el => {
         el.replaceWith(el.cloneNode(true));
     });
@@ -546,9 +589,5 @@ function updatePlayerSlots(players) {
         }
     }
 }
-
-/* =========================================================
-   GLOBAL HOOK (kept for any inline onclick in HTML)
-========================================================= */
 
 window.handleTokenClick = handleTokenClick;
