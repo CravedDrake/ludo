@@ -115,16 +115,17 @@ const PLAYER_LABELS = {
     player4: "Yellow"
 };
 
-/* Safe cells: every color's own launch square, plus the square just
-   before each color turns into its home stretch. Tokens here can't
-   be captured. */
+/* Safe cells: every color's own launch square (colored star), plus
+   the shared colorless star 8 steps further along the track — the
+   same convention used by standard Ludo boards/engines. Tokens on
+   any of these 8 cells can't be captured. */
 const SAFE_CELLS = new Set();
 for (const p of Object.keys(START_OFFSET)) {
-    const offset = START_OFFSET[p];
-    const start  = TRACK_PATH[offset];
-    const branch = TRACK_PATH[(offset + 50) % 52];
+    const offset     = START_OFFSET[p];
+    const start      = TRACK_PATH[offset];
+    const neutralStar = TRACK_PATH[(offset + 8) % 52];
     SAFE_CELLS.add(start.join(","));
-    SAFE_CELLS.add(branch.join(","));
+    SAFE_CELLS.add(neutralStar.join(","));
 }
 
 /* relative token index meaning:
@@ -501,10 +502,50 @@ function showGameUI(room, players) {
 
     renderTokens(game);
     wireTokenClicks(game, mySlot);
+    updatePlayerLegend(players, game.currentTurn, game.winner);
+    updateHomeLabels(players);
 
     if (game.winner) {
         const winnerName = players[game.winner]?.name || game.winner;
         turnIndicator.textContent = `🏆 ${winnerName} wins!`;
+    }
+}
+
+/* =========================================================
+   PLAYER LEGEND — color swatch beside each player's name
+========================================================= */
+
+function updatePlayerLegend(players, currentTurn, winner) {
+    for (let i = 1; i <= 4; i++) {
+        const slot     = "player" + i;
+        const itemEl   = document.getElementById(`legend-${slot}`);
+        const nameEl   = document.getElementById(`legend-${slot}-name`);
+        if (!itemEl || !nameEl) continue;
+
+        const p = players[slot];
+
+        nameEl.textContent = p ? p.name : `${PLAYER_LABELS[slot]} (empty)`;
+        itemEl.classList.toggle("legend-item--empty", !p);
+        itemEl.classList.toggle("legend-item--turn", !!p && slot === currentTurn && !winner);
+        itemEl.classList.toggle("legend-item--winner", !!p && slot === winner);
+    }
+}
+
+/* =========================================================
+   HOME LABELS — player name shown right on the board, beside
+   that color's own corner/home circle (label-red, label-blue,
+   label-green, label-yellow in room.html/room.css).
+========================================================= */
+
+function updateHomeLabels(players) {
+    for (let i = 1; i <= 4; i++) {
+        const slot  = "player" + i;
+        const color = COLOR_MAP[slot];
+        const el    = document.getElementById(`home-name-${color}`);
+        if (!el) continue;
+
+        const p = players[slot];
+        el.textContent = p ? p.name : "";
     }
 }
 
@@ -538,6 +579,60 @@ function renderTokens(game) {
             }
         }
     }
+
+    spreadStackedTokens();
+}
+
+/* =========================================================
+   SPREAD STACKED TOKENS
+   When 2+ tokens (same or different colors) land on the same
+   cell — very common on safe cells — they were being appended
+   on top of each other. The topmost one soaked up every click
+   and the token(s) underneath became permanently unclickable.
+   This nudges each token in a shared cell into its own corner
+   so every token keeps its own clickable hit area.
+========================================================= */
+
+function spreadStackedTokens() {
+    const parents = new Set();
+    document.querySelectorAll(".token").forEach(t => {
+        if (t.parentElement) parents.add(t.parentElement);
+    });
+
+    const corners = [
+        { top: "6%",  left: "6%"  },
+        { top: "6%",  left: "50%" },
+        { top: "50%", left: "6%"  },
+        { top: "50%", left: "50%" }
+    ];
+
+    parents.forEach(parent => {
+        const tokens = Array.from(parent.children).filter(c => c.classList.contains("token"));
+
+        if (tokens.length <= 1) {
+            tokens.forEach(t => {
+                t.style.position = "";
+                t.style.top      = "";
+                t.style.left     = "";
+                t.style.width    = "";
+                t.style.height   = "";
+                t.style.zIndex   = "";
+            });
+            return;
+        }
+
+        parent.style.position = parent.style.position || "relative";
+
+        tokens.forEach((t, i) => {
+            const corner = corners[i % corners.length];
+            t.style.position = "absolute";
+            t.style.top      = corner.top;
+            t.style.left     = corner.left;
+            t.style.width    = "44%";
+            t.style.height   = "44%";
+            t.style.zIndex   = String(10 + i);
+        });
+    });
 }
 
 /* =========================================================
