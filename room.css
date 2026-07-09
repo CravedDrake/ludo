@@ -607,3 +607,155 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+
+/* ================================================================
+   RESULT / RANKING POPUP
+   Shown when a player finishes all 4 tokens. If other players are
+   still in the game, it's a dismissible "X Won / finished Nth"
+   toast with a Continue button. Once only one player is left
+   unfinished, they're auto-placed last and this becomes the final
+   modal (simple "Won" for 2-player games, full numbered/colored
+   ranking for 3–4 player games) with only a Leave Game button.
+   ================================================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none; /* toggled to flex by JS */
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(15, 12, 40, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: modalFadeIn 0.2s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 380px;
+  background: rgba(45,42,110,0.92);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-lg);
+  padding: var(--sp-8) var(--sp-6) var(--sp-6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  text-align: center;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.15), 0 24px 64px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: modalPopIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes modalPopIn {
+  from { transform: scale(0.85) translateY(12px); opacity: 0; }
+  to   { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.modal-icon {
+  font-size: 3rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 16px rgba(139,92,246,0.5));
+}
+
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  text-shadow: 0 0 24px rgba(139,92,246,0.5);
+  line-height: 1.3;
+}
+
+.modal-ranking {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.rank-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-md);
+}
+
+.rank-row:first-child {
+  border-color: rgba(234,179,8,0.5);
+  background: rgba(234,179,8,0.1);
+  box-shadow: 0 0 16px rgba(234,179,8,0.2);
+}
+
+.rank-number {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  width: 1.5rem;
+  flex-shrink: 0;
+}
+
+.rank-row .legend-color {
+  width: 16px;
+  height: 16px;
+}
+
+.rank-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-modal-continue,
+.btn-modal-leave {
+  width: 100%;
+  padding: 0.875rem var(--sp-6);
+  min-height: 52px;
+  border: none;
+  border-radius: var(--r-md);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background var(--ease), transform var(--ease), box-shadow var(--ease);
+}
+
+.btn-modal-continue {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.45);
+}
+.btn-modal-continue:hover { background: #6D28D9; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,58,237,0.6); }
+.btn-modal-continue:active { transform: translateY(0); }
+
+.btn-modal-leave {
+  background: rgba(220,38,38,0.15);
+  border: 1.5px solid rgba(220,38,38,0.45);
+  color: var(--danger-light);
+}
+.btn-modal-leave:hover { background: rgba(220,38,38,0.25); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(220,38,38,0.3); }
+.btn-modal-leave:active { transform: translateY(0); }
+
+@media (max-width: 460px) {
+  .modal-card { padding: var(--sp-6) var(--sp-5) var(--sp-5); }
+  .modal-icon { font-size: 2.5rem; }
+  .modal-title { font-size: 1.25rem; }
+}
