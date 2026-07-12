@@ -31,6 +31,14 @@ function getMySlot() {
 const isHost = sessionStorage.getItem("isHost") === "true";
 
 /* =========================================================
+   TIMING CONSTANTS
+========================================================= */
+
+const ROLL_DURATION = 1000; // ms — how long the synced dice-spin animation runs
+const TURN_SECONDS  = 45;   // per-turn countdown shown on each color's timer badge
+const STALE_ROLL_MS = ROLL_DURATION + 4000; // safety window before any client can clear a stuck roll
+
+/* =========================================================
    UI ELEMENTS
 ========================================================= */
 
@@ -43,9 +51,29 @@ const copyRoomBtn   = document.getElementById("copy-room-btn");
 const waitingMsg    = document.getElementById("waiting-message");
 
 const gameContainer = document.getElementById("game-container");
-const rollDiceBtn   = document.getElementById("roll-dice-btn");
-const diceValueEl   = document.getElementById("dice-value");
 const turnIndicator = document.getElementById("turn-indicator");
+
+/* Per-color dice boxes */
+const diceBoxes = {
+    player1: document.getElementById("dice-box-player1"),
+    player2: document.getElementById("dice-box-player2"),
+    player3: document.getElementById("dice-box-player3"),
+    player4: document.getElementById("dice-box-player4"),
+};
+const diceImgs = {
+    player1: document.getElementById("dice-img-player1"),
+    player2: document.getElementById("dice-img-player2"),
+    player3: document.getElementById("dice-img-player3"),
+    player4: document.getElementById("dice-img-player4"),
+};
+
+/* NEW: per-color turn-timer badges (45s countdown) */
+const diceTimers = {
+    player1: document.getElementById("dice-timer-player1"),
+    player2: document.getElementById("dice-timer-player2"),
+    player3: document.getElementById("dice-timer-player3"),
+    player4: document.getElementById("dice-timer-player4"),
+};
 
 /* Result / ranking popup */
 const resultModal      = document.getElementById("result-modal");
@@ -57,6 +85,54 @@ const modalLeaveBtn     = document.getElementById("modal-leave-btn");
 
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
+
+/* =========================================================
+   DICE SOUND — Web Audio API instead of a plain <audio>
+   element. HTMLMediaElement.play() has to spin up a fresh decode
+   pipeline on every call, which is what was causing the noticeable
+   lag on other/slower devices. Decoding the clip into an AudioBuffer
+   ONCE up front, then firing it via a fresh AudioBufferSourceNode
+   on every roll, plays back near-instantly on any device. Falls
+   back to a plain <audio> element if Web Audio isn't available or
+   the decode fails for some reason.
+========================================================= */
+
+let audioCtx        = null;
+let diceSoundBuffer  = null;
+const diceSoundFallback = new Audio("sounds/dice rolling.mp3");
+diceSoundFallback.preload = "auto";
+
+(async function initDiceAudio() {
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const resp = await fetch("sounds/dice rolling.mp3");
+        const arrayBuffer = await resp.arrayBuffer();
+        diceSoundBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.warn("Web Audio dice-sound init failed, will use fallback <audio>:", e);
+        audioCtx = null;
+        diceSoundBuffer = null;
+    }
+})();
+
+function playDiceSound() {
+    if (audioCtx && diceSoundBuffer) {
+        // Mobile browsers suspend the AudioContext until a user gesture;
+        // resume() here (called synchronously from the click handler) satisfies that.
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = diceSoundBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+    } else {
+        diceSoundFallback.currentTime = 0;
+        diceSoundFallback.play().catch(() => {
+            // Autoplay restrictions — safe to ignore, roll still works visually
+        });
+    }
+}
 
 /* =========================================================
    BOARD PATH — matches the real 15x15 grid in room.html
@@ -109,6 +185,21 @@ const HOME_PARK_CELLS = {
     player4: ["c-11-11", "c-11-12", "c-12-11", "c-12-12"]
 };
 
+/* FINISH_SLOT_CELLS — individual outer-ring cells where each
+   finished token (index === 56) is placed, one token per cell,
+   instead of piling all 4 into the shared home circle/square. Red
+   and Green use their corner's LEFT-hand outer column; Blue and
+   Yellow use their corner's RIGHT-hand outer column. Order is
+   top-to-bottom for the top corners (red/blue) and top-to-bottom
+   for the bottom corners too (green/yellow) — the first token that
+   color finishes goes in slot 0, the next in slot 1, etc. */
+const FINISH_SLOT_CELLS = {
+    player1: ["c-1-0",  "c-2-0",  "c-3-0",  "c-4-0"],   // red   (top-left corner, left column)
+    player2: ["c-1-14", "c-2-14", "c-3-14", "c-4-14"],  // blue  (top-right corner, right column)
+    player3: ["c-10-0", "c-11-0", "c-12-0", "c-13-0"],  // green (bottom-left corner, left column)
+    player4: ["c-10-14","c-11-14","c-12-14","c-13-14"]  // yellow (bottom-right corner, right column)
+};
+
 const COLOR_MAP = {
     player1: "red",
     player2: "blue",
@@ -135,6 +226,17 @@ for (const p of Object.keys(START_OFFSET)) {
     SAFE_CELLS.add(start.join(","));
     SAFE_CELLS.add(neutralStar.join(","));
 }
+
+/* mark the finish-slot cells with a class so room.css can show
+   a faint flag watermark on them even before any token lands there. */
+(function markFinishSlots() {
+    for (const slot in FINISH_SLOT_CELLS) {
+        for (const cellId of FINISH_SLOT_CELLS[slot]) {
+            const el = document.getElementById(cellId);
+            if (el) el.classList.add("finish-slot");
+        }
+    }
+})();
 
 /* relative token index meaning:
    -1        => parked at home
@@ -183,6 +285,17 @@ function hasLegalMove(dice, tokens) {
         if (idx >= 0 && idx !== 56 && idx + dice <= 56) return true;
     }
     return false;
+}
+
+/* Finds the first token that has a legal move for the given dice
+   value — used to auto-play a turn when the 45s timer runs out. */
+function findFirstLegalToken(dice, tokens) {
+    for (const key in tokens) {
+        const idx = tokens[key].index;
+        if (idx === -1 && dice === 6) return key;
+        if (idx >= 0 && idx !== 56 && idx + dice <= 56) return key;
+    }
+    return null;
 }
 
 /* =========================================================
@@ -406,10 +519,9 @@ async function joinRoom() {
 startGameBtn?.addEventListener("click", async () => {
     if (!isHost) return;
 
-    const snap = await get(roomRef);
-    if (!snap.exists()) return;
+    const room = latestRoom;
+    if (!room) return;
 
-    const room      = snap.val();
     const players   = room.players || {};
     const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
     const active    = turnOrder.filter(s => players[s]);
@@ -421,6 +533,8 @@ startGameBtn?.addEventListener("click", async () => {
         "game/currentTurn":    firstTurn,
         "game/diceValue":      0,
         "game/diceRolled":     false,
+        "game/rolling":        null,
+        "game/turnStartedAt":  Date.now(),
         "game/winner":         null,
         "game/finishOrder":    [],
         "game/gameOver":       false,
@@ -433,43 +547,155 @@ startGameBtn?.addEventListener("click", async () => {
 });
 
 /* =========================================================
-   DICE ROLL
-   Auto-skips the turn if the roll leaves no legal move,
-   so the game can never soft-lock on a bad roll.
+   NEW: SYNCED DICE ROLL SYSTEM
+   Rolling is now a piece of shared state (`game/rolling`) instead
+   of a purely local animation. Whoever clicks their own dice box
+   writes `{ slot, startedAt }` to the room; EVERY connected client
+   (including the roller) reacts to that write by spinning the same
+   dice box for the same ~1s window, driven off the same `startedAt`
+   timestamp so they all end together. Only the roller's own client
+   then computes the actual result and writes it back, clearing
+   `game/rolling`. This is what makes the roll — and its result —
+   show up in real time on every device instead of just the
+   roller's.
 ========================================================= */
 
-rollDiceBtn?.addEventListener("click", async () => {
+let currentAnimatingSlot = null; // slot currently showing the synced roll animation locally
+let diceAnimInterval      = null; // face-cycling interval for the active animation
+let animationStopTimeout  = null; // timeout that ends the active animation
+
+function startDiceAnimation(slot, startedAt) {
+    const box = diceBoxes[slot];
+    const img = diceImgs[slot];
+    if (!box || !img) return;
+
+    currentAnimatingSlot = slot;
+    box.classList.add("dice-rolling");
+    playDiceSound();
+
+    diceAnimInterval = setInterval(() => {
+        const randomFace = Math.floor(Math.random() * 6) + 1;
+        img.src = `images/dice/${randomFace}.png`;
+    }, 70 + Math.random() * 20);
+
+    const elapsed   = Date.now() - startedAt;
+    const remaining = Math.max(0, ROLL_DURATION - elapsed);
+
+    animationStopTimeout = setTimeout(() => {
+        finishDiceAnimation(slot);
+    }, remaining);
+}
+
+function stopDiceAnimation(slot) {
+    const box = diceBoxes[slot];
+    if (box) box.classList.remove("dice-rolling");
+    if (diceAnimInterval)     { clearInterval(diceAnimInterval); diceAnimInterval = null; }
+    if (animationStopTimeout) { clearTimeout(animationStopTimeout); animationStopTimeout = null; }
+    if (currentAnimatingSlot === slot) currentAnimatingSlot = null;
+}
+
+function finishDiceAnimation(slot) {
+    stopDiceAnimation(slot);
+
     const mySlot = getMySlot();
-    if (!mySlot) return;
+    if (slot === mySlot) {
+        finalizeRoll(slot);
+    }
+}
 
-    const snap = await get(roomRef);
-    if (!snap.exists()) return;
+/* Keeps every client's local animation in sync with `game.rolling`.
+   Called on every realtime update. */
+function syncDiceRollingAnimation(game) {
+    const rolling = game.rolling;
 
-    const room      = snap.val();
-    const game      = room.game;
-    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
+    if (!rolling || !rolling.slot) {
+        if (currentAnimatingSlot) stopDiceAnimation(currentAnimatingSlot);
+        return;
+    }
 
-    if (game.currentTurn !== mySlot) return;
-    if (game.diceRolled)             return;
-    if (game.gameOver)               return;
+    if (rolling.slot === currentAnimatingSlot) return; // already animating this exact roll
+
+    if (currentAnimatingSlot) stopDiceAnimation(currentAnimatingSlot);
+    startDiceAnimation(rolling.slot, rolling.startedAt);
+}
+
+/* Called ONLY by the client whose color just finished rolling.
+   Computes the real dice value, checks for a legal move, and writes
+   the final result (or an auto-skip if nothing can move).
+
+   NEW: uses the locally cached `latestRoom`/`latestGame` (kept fresh
+   by the onValue listener) instead of doing a fresh get(roomRef)
+   read here. That read-then-write pattern meant every single roll
+   paid for TWO full network round-trips back to Firebase before
+   anything visually resolved — fine on a fast/low-latency laptop
+   connection, but very noticeable extra delay on phone wifi/cellular.
+   Since the listener already has the up-to-date state, we can skip
+   straight to the write. */
+async function finalizeRoll(mySlot) {
+    const room = latestRoom;
+    const game = latestGame;
+    const turnOrder = (room && room.turnOrder) || ["player1", "player2", "player3", "player4"];
+
+    // Safety: only finalize if this roll is still genuinely ours
+    if (!game || !game.rolling || game.rolling.slot !== mySlot) return;
+    if (game.currentTurn !== mySlot) {
+        await update(roomRef, { "game/rolling": null });
+        return;
+    }
 
     const dice = Math.floor(Math.random() * 6) + 1;
+    const img  = diceImgs[mySlot];
+    if (img) img.src = `images/dice/${dice}.png`;
 
     if (!hasLegalMove(dice, game.tokens[mySlot])) {
         const finishOrder = game.finishOrder || [];
         const nextTurn    = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
         await update(roomRef, {
-            "game/diceValue":   dice,
-            "game/diceRolled":  false,
-            "game/currentTurn": nextTurn
+            "game/rolling":       null,
+            "game/diceValue":     dice,
+            "game/diceRolled":    false,
+            "game/currentTurn":   nextTurn,
+            "game/turnStartedAt": Date.now()
         });
         return;
     }
 
     await update(roomRef, {
+        "game/rolling":    null,
         "game/diceValue":  dice,
         "game/diceRolled": true
     });
+}
+
+/* Click handler shared by all 4 dice boxes. Only fires for real if
+   the clicked box belongs to the LOCAL player's own color, it's
+   currently that color's turn, and no roll is already in progress. */
+async function handleDiceClick(slot) {
+    const mySlot = getMySlot();
+    if (!mySlot) return;
+    if (slot !== mySlot) return;
+    if (!latestGame) return;
+
+    const game = latestGame;
+    const room = latestRoom;
+    if (!room) return;
+
+    if (game.currentTurn !== mySlot)          return;
+    if (game.diceRolled)                      return;
+    if (game.gameOver)                        return;
+    if (game.rolling && game.rolling.slot)    return; // a roll is already in flight
+
+    try {
+        await update(roomRef, {
+            "game/rolling": { slot: mySlot, startedAt: Date.now() }
+        });
+    } catch (e) {
+        console.error("Failed to start dice roll:", e);
+    }
+}
+
+Object.keys(diceBoxes).forEach(slot => {
+    diceBoxes[slot]?.addEventListener("click", () => handleDiceClick(slot));
 });
 
 /* =========================================================
@@ -480,12 +706,11 @@ async function handleTokenClick(player, tokenKey) {
     const mySlot = getMySlot();
     if (!mySlot) return;
 
-    const snap = await get(roomRef);
-    if (!snap.exists()) return;
-
-    const room      = snap.val();
-    const game      = room.game;
-    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
+    // NEW: use cached state instead of a fresh get(roomRef) round-trip —
+    // see the comment on finalizeRoll() above for why.
+    const room = latestRoom;
+    const game = latestGame;
+    if (!room || !game) return;
 
     if (game.currentTurn !== mySlot) return;
     if (player !== mySlot)           return;
@@ -493,18 +718,25 @@ async function handleTokenClick(player, tokenKey) {
     if (game.gameOver)               return;
 
     const dice  = game.diceValue;
-    let   index = game.tokens[player][tokenKey].index;
+    const index = game.tokens[player][tokenKey].index;
 
-    if (index === 56) return; // already home
+    if (index === 56) return;              // already home
+    if (index === -1 && dice !== 6) return; // can't leave home without a 6
+    if (index >= 0 && index + dice > 56) return; // overshoot, illegal move
 
-    if (index === -1) {
-        if (dice !== 6) return;
-        index = 0;
-    } else {
-        index += dice;
-    }
+    await performMove(player, tokenKey, room);
+}
 
-    if (index > 56) return; // overshoot, illegal move
+/* Shared by manual token clicks AND the 45s auto-timeout, so both
+   paths use exactly the same move/capture/finish logic. */
+async function performMove(player, tokenKey, room) {
+    const game      = room.game;
+    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
+    const dice      = game.diceValue;
+
+    let index = game.tokens[player][tokenKey].index;
+    index = (index === -1) ? 0 : index + dice;
+    if (index > 56) return; // safety guard
 
     const captureUpdates = {};
 
@@ -558,27 +790,154 @@ async function handleTokenClick(player, tokenKey) {
     } else if (allHome) {
         /* This player just finished — hand off to the next player
            still in the game, ignore any "extra turn" they'd have earned. */
-        nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+        nextTurn = getNextTurn(turnOrder, room.players, player, finishOrder);
     } else {
         nextTurn = grantsExtraTurn
-            ? mySlot
-            : getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+            ? player
+            : getNextTurn(turnOrder, room.players, player, finishOrder);
     }
 
     const moveUpdates = {
         ...captureUpdates,
         [`game/tokens/${player}/${tokenKey}/index`]: index,
-        "game/diceValue":   0,
-        "game/diceRolled":  false,
-        "game/currentTurn": nextTurn,
-        "game/finishOrder": finishOrder,
-        "game/gameOver":    gameOver,
-        "game/finalOrder":  gameOver ? finalOrder : null,
-        "game/winner":      gameOver ? finalOrder[0] : null
+        "game/diceValue":     0,
+        "game/diceRolled":    false,
+        "game/currentTurn":   nextTurn,
+        "game/finishOrder":   finishOrder,
+        "game/gameOver":      gameOver,
+        "game/finalOrder":    gameOver ? finalOrder : null,
+        "game/winner":        gameOver ? finalOrder[0] : null,
+        "game/turnStartedAt": gameOver ? null : Date.now()
     };
 
     await update(roomRef, moveUpdates);
 }
+
+/* =========================================================
+   NEW: 45-SECOND TURN TIMER
+   `game/turnStartedAt` marks when the CURRENT turn began. Every
+   client ticks a local interval that reads the elapsed time off
+   that shared timestamp, so all devices count down in sync without
+   needing per-tick database writes. Only the client whose color is
+   actually up acts on expiry (forfeiting the roll, or auto-playing
+   the first legal token if the dice was already rolled), so the
+   timeout is never double-applied.
+========================================================= */
+
+let latestRoom   = null;
+let latestGame   = null;
+let latestPlayers = null;
+
+let timeoutHandledForTurn = null; // the turnStartedAt value we've already auto-acted on
+
+function updateTimerBadges(currentTurn, remaining, gameOver) {
+    for (const slot of ["player1", "player2", "player3", "player4"]) {
+        const badge = diceTimers[slot];
+        if (!badge) continue;
+
+        const isActive = !gameOver && slot === currentTurn;
+        badge.classList.toggle("dice-timer--active", isActive);
+
+        if (isActive) {
+            badge.textContent = String(Math.max(0, remaining));
+            badge.classList.toggle("dice-timer--warning", remaining <= 10);
+        } else {
+            badge.classList.remove("dice-timer--warning");
+        }
+    }
+}
+
+function clearAllTimerBadges() {
+    for (const slot of ["player1", "player2", "player3", "player4"]) {
+        const badge = diceTimers[slot];
+        if (!badge) continue;
+        badge.classList.remove("dice-timer--active", "dice-timer--warning");
+    }
+}
+
+async function handleTurnTimeout(mySlot) {
+    // NEW: use cached state instead of a fresh get(roomRef) round-trip.
+    const room = latestRoom;
+    const game = latestGame;
+    if (!room || !game || game.gameOver) return;
+    if (game.currentTurn !== mySlot) return;
+    if (game.rolling && game.rolling.slot) return; // mid-roll — let it resolve first
+
+    const turnOrder   = room.turnOrder || ["player1", "player2", "player3", "player4"];
+    const finishOrder = game.finishOrder || [];
+
+    if (!game.diceRolled) {
+        // Ran out of time before even rolling — forfeit the turn.
+        const nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+        await update(roomRef, {
+            "game/diceValue":     0,
+            "game/diceRolled":    false,
+            "game/currentTurn":   nextTurn,
+            "game/turnStartedAt": Date.now()
+        });
+        return;
+    }
+
+    // Dice was rolled but no move was made in time — auto-play the first legal token.
+    const dice     = game.diceValue;
+    const tokens   = game.tokens[mySlot];
+    const tokenKey = findFirstLegalToken(dice, tokens);
+
+    if (tokenKey) {
+        await performMove(mySlot, tokenKey, room);
+    } else {
+        const nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+        await update(roomRef, {
+            "game/diceValue":     0,
+            "game/diceRolled":    false,
+            "game/currentTurn":   nextTurn,
+            "game/turnStartedAt": Date.now()
+        });
+    }
+}
+
+function tickTurnTimer() {
+    if (!latestGame || !latestRoom) return;
+    const game = latestGame;
+
+    if (latestRoom.status !== "playing" || game.gameOver) {
+        clearAllTimerBadges();
+        return;
+    }
+
+    // Safety net: if a roll has been "in flight" way longer than it should
+    // (the roller's device likely dropped), any client can clear it so the
+    // game doesn't stall forever.
+    if (game.rolling && game.rolling.startedAt) {
+        const rollElapsed = Date.now() - game.rolling.startedAt;
+        if (rollElapsed > STALE_ROLL_MS) {
+            update(roomRef, { "game/rolling": null }).catch(() => {});
+        }
+    }
+
+    const turnStartedAt = game.turnStartedAt;
+    if (!turnStartedAt) {
+        updateTimerBadges(game.currentTurn, TURN_SECONDS, false);
+        return;
+    }
+
+    const elapsed   = (Date.now() - turnStartedAt) / 1000;
+    const remaining = Math.ceil(TURN_SECONDS - elapsed);
+
+    updateTimerBadges(game.currentTurn, remaining, false);
+
+    const mySlot = getMySlot();
+    if (
+        remaining <= 0 &&
+        mySlot === game.currentTurn &&
+        timeoutHandledForTurn !== turnStartedAt
+    ) {
+        timeoutHandledForTurn = turnStartedAt;
+        handleTurnTimeout(mySlot);
+    }
+}
+
+setInterval(tickTurnTimer, 250);
 
 /* =========================================================
    REALTIME SYNC — main listener
@@ -590,6 +949,10 @@ onValue(roomRef, (snap) => {
     const room    = snap.val();
     const players = room.players || {};
     const mySlot  = getMySlot();
+
+    latestRoom    = room;
+    latestGame    = room.game || null;
+    latestPlayers = players;
 
     updatePlayerSlots(players);
 
@@ -631,6 +994,7 @@ onValue(roomRef, (snap) => {
     }
 
     if (room.status === "playing" && room.game) {
+        syncDiceRollingAnimation(room.game);
         showGameUI(room, players);
         handleResultPopups(room.game, players);
     }
@@ -648,22 +1012,55 @@ function showGameUI(room, players) {
     const mySlot   = getMySlot();
     const isMeTurn = game.currentTurn === mySlot;
 
-    diceValueEl.textContent = game.diceValue || "–";
-
     if (game.gameOver) {
         turnIndicator.textContent = "🏁 Game Over!";
-        rollDiceBtn.disabled      = true;
-        rollDiceBtn.style.opacity = "0.4";
     } else {
         turnIndicator.textContent = `${PLAYER_LABELS[game.currentTurn]}'s turn${isMeTurn ? " (You!)" : ""}`;
-        rollDiceBtn.disabled       = !isMeTurn || game.diceRolled;
-        rollDiceBtn.style.opacity  = rollDiceBtn.disabled ? "0.4" : "1";
     }
 
+    updateDiceBoxes(game, players, mySlot);
     renderTokens(game);
     wireTokenClicks(game, mySlot);
     updatePlayerLegend(players, game.currentTurn, game.winner);
     updateHomeLabels(players);
+}
+
+/* =========================================================
+   UPDATE DICE BOXES
+   Runs on every realtime update. Shows/hides + dims/glows each of
+   the 4 per-color dice boxes based on whose turn it is, whether a
+   seat is filled, and whether it's the local player's own color.
+   Skips overwriting the dice face while a synced roll animation is
+   actively spinning that box (syncDiceRollingAnimation owns it then).
+========================================================= */
+
+function updateDiceBoxes(game, players, mySlot) {
+    for (const slot of ["player1", "player2", "player3", "player4"]) {
+        const box = diceBoxes[slot];
+        const img = diceImgs[slot];
+        if (!box || !img) continue;
+
+        const playerExists = !!players[slot];
+        box.classList.toggle("dice-box--empty", !playerExists);
+
+        if (!playerExists) {
+            box.classList.remove("dice-active", "dice-idle", "dice-box--mine");
+            continue;
+        }
+
+        const isThisTurn = !game.gameOver && slot === game.currentTurn;
+
+        box.classList.toggle("dice-active", isThisTurn);
+        box.classList.toggle("dice-idle", !isThisTurn);
+        box.classList.toggle("dice-box--mine", slot === mySlot);
+
+        // Don't stomp the face while a synced rolling animation owns this box
+        if (currentAnimatingSlot === slot) continue;
+
+        if (isThisTurn) {
+            img.src = game.diceValue ? `images/dice/${game.diceValue}.png` : "images/dice/1.png";
+        }
+    }
 }
 
 /* =========================================================
@@ -711,7 +1108,8 @@ function updateHomeLabels(players) {
 function renderTokens(game) {
     for (const player in game.tokens) {
         const tokenKeys = Object.keys(game.tokens[player]);
-        let   homeSlot  = 0;
+        let   homeSlot   = 0; // parked-at-home slot index (index === -1)
+        let   finishSlot = 0; // individual finish-slot index (index === 56)
 
         for (const tokenKey of tokenKeys) {
             const el = document.getElementById(`${player}-${tokenKey}`);
@@ -725,8 +1123,18 @@ function renderTokens(game) {
                 const cell = cellId ? document.getElementById(cellId) : null;
                 if (cell) cell.appendChild(el);
             } else if (index === 56) {
-                const homeCircle = document.getElementById(`hc-${COLOR_MAP[player]}`);
-                if (homeCircle) homeCircle.appendChild(el);
+                /* Finished tokens go to their own individual outer-ring
+                   slot cell instead of piling into the shared home circle. */
+                const cellId = FINISH_SLOT_CELLS[player]?.[finishSlot];
+                finishSlot++;
+                const cell = cellId ? document.getElementById(cellId) : null;
+                if (cell) {
+                    cell.appendChild(el);
+                } else {
+                    // Fallback, in case more than 4 slots were ever needed
+                    const homeCircle = document.getElementById(`hc-${COLOR_MAP[player]}`);
+                    if (homeCircle) homeCircle.appendChild(el);
+                }
             } else {
                 const coord = getAbsoluteCoord(player, index);
                 const cell  = getCellEl(coord);
@@ -792,6 +1200,10 @@ function spreadStackedTokens() {
 
 /* =========================================================
    WIRE TOKEN CLICKS
+   NEW: also toggles the "clickable" class (pulsing highlight,
+   already defined in room.css) on exactly the tokens that have a
+   legal move right now, so it's obvious at a glance what you can
+   move after rolling.
 ========================================================= */
 
 function wireTokenClicks(game, mySlot) {
@@ -799,16 +1211,40 @@ function wireTokenClicks(game, mySlot) {
         el.replaceWith(el.cloneNode(true));
     });
 
+    // Clear stale highlighting on everyone's tokens first
+    for (let i = 1; i <= 4; i++) {
+        const slot   = "player" + i;
+        const tokens = game.tokens[slot];
+        if (!tokens) continue;
+        for (const tokenKey in tokens) {
+            const el = document.getElementById(`${slot}-${tokenKey}`);
+            if (el) {
+                el.classList.remove("clickable");
+                el.style.cursor = "default";
+            }
+        }
+    }
+
     if (!mySlot) return;
 
     const myTokenData = game.tokens[mySlot];
     if (!myTokenData) return;
 
+    const canInteract = !game.gameOver && game.currentTurn === mySlot && game.diceRolled;
+    const dice = game.diceValue;
+
     for (const tokenKey in myTokenData) {
         const el = document.getElementById(`${mySlot}-${tokenKey}`);
         if (!el) continue;
 
-        el.style.cursor = "pointer";
+        const index = myTokenData[tokenKey].index;
+        const isLegal = canInteract && (
+            (index === -1 && dice === 6) ||
+            (index >= 0 && index !== 56 && index + dice <= 56)
+        );
+
+        el.classList.toggle("clickable", isLegal);
+        el.style.cursor = isLegal ? "pointer" : "default";
         el.addEventListener("click", () => handleTokenClick(mySlot, tokenKey));
     }
 }

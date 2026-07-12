@@ -1,149 +1,178 @@
 <!DOCTYPE html>
-    <html lang="en">
-    <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ludo — Waiting Room</title>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ludo — Waiting Room</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
-        rel="stylesheet"
-    />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet"
+/>
 
-    <link rel="stylesheet" href="room.css" />
-    </head>
+<link rel="stylesheet" href="room.css" />
+</head>
 
-    <body>
+<body>
 
-    <div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-grid" aria-hidden="true"></div>
 
-    <!-- ╔════════ WAITING ROOM UI ════════╗ -->
-    <main class="page">
+<!-- ╔════════ WAITING ROOM UI ════════╗ -->
+<main class="page">
 
-    <!-- HEADER -->
-    <header class="hero">
-        <div class="ludo-token" aria-hidden="true">
-        <div class="ludo-token__body">
-            <div class="ludo-token__dome"></div>
-        </div>
-        </div>
-        <h1 class="hero__title">LUDO</h1>
-        <p class="hero__subtitle">Waiting Room</p>
-    </header>
-
-    <!-- ROOM INFO -->
-    <section class="card" aria-label="Room information">
-        <h2 class="card__heading">Room Code</h2>
-        <div class="room-code-row">
-        <span class="room-code" id="room-code">……</span>
-        <button class="btn-copy" id="copy-room-btn" type="button">Copy</button>
-        </div>
-        <div class="divider"></div>
-        <div class="game-status-row">
-        <span class="game-status__label">Game Status</span>
-        <span class="game-status__value" id="game-status">Waiting for players…</span>
-        </div>
-    </section>
-
-    <!-- JOIN CARD -->
-    <section class="card" id="join-card">
-        <h2 class="card__heading">Join Room</h2>
-        <div class="field">
-        <input
-            type="text"
-            id="join-name"
-            class="field__input"
-            placeholder="Enter your name"
-            maxlength="20"
-            autocomplete="off"
-        />
-        </div>
-        <button id="join-btn" class="btn-create" type="button">Join Game</button>
-    </section>
-
-    <!-- PLAYERS -->
-    <section class="card">
-        <h2 class="card__heading">Players</h2>
-        <ul class="player-list">
-        <li class="player-slot player-slot--empty" id="player1-slot">
-            <div class="player-slot__color player-slot__color--red"></div>
-            <div class="player-slot__info">
-            <span id="player1-name">Waiting…</span>
-            <span id="player1-status">Empty</span>
-            </div>
-            <span class="badge badge--host">Host</span>
-        </li>
-        <li class="player-slot player-slot--empty" id="player2-slot">
-            <div class="player-slot__color player-slot__color--blue"></div>
-            <div class="player-slot__info">
-            <span id="player2-name">Waiting…</span>
-            <span id="player2-status">Empty</span>
-            </div>
-        </li>
-        <li class="player-slot player-slot--empty" id="player3-slot">
-            <div class="player-slot__color player-slot__color--green"></div>
-            <div class="player-slot__info">
-            <span id="player3-name">Waiting…</span>
-            <span id="player3-status">Empty</span>
-            </div>
-        </li>
-        <li class="player-slot player-slot--empty" id="player4-slot">
-            <div class="player-slot__color player-slot__color--yellow"></div>
-            <div class="player-slot__info">
-            <span id="player4-name">Waiting…</span>
-            <span id="player4-status">Empty</span>
-            </div>
-        </li>
-        </ul>
-    </section>
-
-    <!-- ACTIONS -->
-    <div class="action-row">
-        <button class="btn-leave" id="leave-room-btn" type="button">Leave Room</button>
-        <button
-        class="btn-start btn-start--disabled"
-        id="start-game-btn"
-        aria-disabled="true"
-        type="button"
-        >🎲 Start Game</button>
+<!-- HEADER -->
+<header class="hero">
+    <div class="ludo-token" aria-hidden="true">
+    <div class="ludo-token__body">
+        <div class="ludo-token__dome"></div>
     </div>
+    </div>
+    <h1 class="hero__title">LUDO</h1>
+    <p class="hero__subtitle">Waiting Room</p>
+</header>
 
-    <p class="waiting-message" id="waiting-message">Waiting for more players…</p>
+<!-- ROOM INFO -->
+<section class="card" aria-label="Room information">
+    <h2 class="card__heading">Room Code</h2>
+    <div class="room-code-row">
+    <span class="room-code" id="room-code">……</span>
+    <button class="btn-copy" id="copy-room-btn" type="button">Copy</button>
+    </div>
+    <div class="divider"></div>
+    <div class="game-status-row">
+    <span class="game-status__label">Game Status</span>
+    <span class="game-status__value" id="game-status">Waiting for players…</span>
+    </div>
+</section>
 
-    </main>
+<!-- JOIN CARD -->
+<section class="card" id="join-card">
+    <h2 class="card__heading">Join Room</h2>
+    <div class="field">
+    <input
+        type="text"
+        id="join-name"
+        class="field__input"
+        placeholder="Enter your name"
+        maxlength="20"
+        autocomplete="off"
+    />
+    </div>
+    <button id="join-btn" class="btn-create" type="button">Join Game</button>
+</section>
 
-    <!-- ╔════════ GAME UI ════════╗ -->
-    <div id="game-container" style="display:none;">
+<!-- PLAYERS -->
+<section class="card">
+    <h2 class="card__heading">Players</h2>
+    <ul class="player-list">
+    <li class="player-slot player-slot--empty" id="player1-slot">
+        <div class="player-slot__color player-slot__color--red"></div>
+        <div class="player-slot__info">
+        <span id="player1-name">Waiting…</span>
+        <span id="player1-status">Empty</span>
+        </div>
+        <span class="badge badge--host">Host</span>
+    </li>
+    <li class="player-slot player-slot--empty" id="player2-slot">
+        <div class="player-slot__color player-slot__color--blue"></div>
+        <div class="player-slot__info">
+        <span id="player2-name">Waiting…</span>
+        <span id="player2-status">Empty</span>
+        </div>
+    </li>
+    <li class="player-slot player-slot--empty" id="player3-slot">
+        <div class="player-slot__color player-slot__color--green"></div>
+        <div class="player-slot__info">
+        <span id="player3-name">Waiting…</span>
+        <span id="player3-status">Empty</span>
+        </div>
+    </li>
+    <li class="player-slot player-slot--empty" id="player4-slot">
+        <div class="player-slot__color player-slot__color--yellow"></div>
+        <div class="player-slot__info">
+        <span id="player4-name">Waiting…</span>
+        <span id="player4-status">Empty</span>
+        </div>
+    </li>
+    </ul>
+</section>
 
-    <div class="game-header">
-        <div id="turn-indicator"></div>
+<!-- ACTIONS -->
+<div class="action-row">
+    <button class="btn-leave" id="leave-room-btn" type="button">Leave Room</button>
+    <button
+    class="btn-start btn-start--disabled"
+    id="start-game-btn"
+    aria-disabled="true"
+    type="button"
+    >🎲 Start Game</button>
+</div>
 
-        <!-- PLAYER LEGEND — color swatch beside each player's name -->
-        <div class="player-legend" id="player-legend">
-        <div class="legend-item legend-item--empty" id="legend-player1" data-slot="player1">
-            <span class="legend-color legend-color--red"></span>
-            <span class="legend-name" id="legend-player1-name">Red</span>
-        </div>
-        <div class="legend-item legend-item--empty" id="legend-player2" data-slot="player2">
-            <span class="legend-color legend-color--blue"></span>
-            <span class="legend-name" id="legend-player2-name">Blue</span>
-        </div>
-        <div class="legend-item legend-item--empty" id="legend-player3" data-slot="player3">
-            <span class="legend-color legend-color--green"></span>
-            <span class="legend-name" id="legend-player3-name">Green</span>
-        </div>
-        <div class="legend-item legend-item--empty" id="legend-player4" data-slot="player4">
-            <span class="legend-color legend-color--yellow"></span>
-            <span class="legend-name" id="legend-player4-name">Yellow</span>
-        </div>
-        </div>
+<p class="waiting-message" id="waiting-message">Waiting for more players…</p>
 
-        <div class="dice-row">
-        <button id="roll-dice-btn" type="button">🎲 Roll Dice</button>
-        <div id="dice-value">–</div>
-        </div>
+</main>
+
+<!-- ╔════════ GAME UI ════════╗ -->
+<div id="game-container" style="display:none;">
+
+<div class="game-header">
+    <div id="turn-indicator"></div>
+
+    <!-- PLAYER LEGEND — color swatch beside each player's name -->
+    <div class="player-legend" id="player-legend">
+    <div class="legend-item legend-item--empty" id="legend-player1" data-slot="player1">
+        <span class="legend-color legend-color--red"></span>
+        <span class="legend-name" id="legend-player1-name">Red</span>
+    </div>
+    <div class="legend-item legend-item--empty" id="legend-player2" data-slot="player2">
+        <span class="legend-color legend-color--blue"></span>
+        <span class="legend-name" id="legend-player2-name">Blue</span>
+    </div>
+    <div class="legend-item legend-item--empty" id="legend-player3" data-slot="player3">
+        <span class="legend-color legend-color--green"></span>
+        <span class="legend-name" id="legend-player3-name">Green</span>
+    </div>
+    <div class="legend-item legend-item--empty" id="legend-player4" data-slot="player4">
+        <span class="legend-color legend-color--yellow"></span>
+        <span class="legend-name" id="legend-player4-name">Yellow</span>
+    </div>
+    </div>
+</div>
+
+<!--
+    BOARD WRAP — wraps the board plus 4 per-color dice boxes.
+    Each dice box is positioned absolutely so it looks like a small
+    tab/extension sticking out of the board, right above/below that
+    color's own home corner. Red/Blue sit above the board (their
+    corners are the top two), Green/Yellow sit below (their corners
+    are the bottom two). Red & Green (left corners) sit on the left,
+    Blue & Yellow (right corners) sit on the right. Clicking a dice
+    box rolls for that color — but only the local player's own color
+    is actually clickable (enforced in room.js).
+
+    NEW: each dice box now also carries a small "dice-timer" badge
+    (the 45s per-turn countdown clock) tucked into its corner so it
+    reads as part of the same tab rather than a separate element.
+-->
+<div class="board-wrap" id="board-wrap">
+
+    <div class="dice-box dice-box--red" id="dice-box-player1">
+        <img src="images/dice/1.png" alt="Red dice" id="dice-img-player1" class="dice-face" />
+        <div class="dice-timer" id="dice-timer-player1">45</div>
+    </div>
+    <div class="dice-box dice-box--blue" id="dice-box-player2">
+        <img src="images/dice/1.png" alt="Blue dice" id="dice-img-player2" class="dice-face" />
+        <div class="dice-timer" id="dice-timer-player2">45</div>
+    </div>
+    <div class="dice-box dice-box--green" id="dice-box-player3">
+        <img src="images/dice/1.png" alt="Green dice" id="dice-img-player3" class="dice-face" />
+        <div class="dice-timer" id="dice-timer-player3">45</div>
+    </div>
+    <div class="dice-box dice-box--yellow" id="dice-box-player4">
+        <img src="images/dice/1.png" alt="Yellow dice" id="dice-img-player4" class="dice-face" />
+        <div class="dice-timer" id="dice-timer-player4">45</div>
     </div>
 
     <!--
@@ -437,7 +466,7 @@
         <div class="b-cell zone-yellow"  id="c-14-13"></div>
         <div class="b-cell zone-yellow"  id="c-14-14"></div>
 
-        <!-- HOME CIRCLES inside corner zones -->
+        <!-- HOME SQUARES inside corner zones (previously circles — see room.css) -->
         <div class="home-circle hc-red"    id="hc-red"></div>
         <div class="home-circle hc-blue"   id="hc-blue"></div>
         <div class="home-circle hc-green"  id="hc-green"></div>
@@ -475,22 +504,24 @@
 
     </div><!-- #ludo-board -->
 
-    </div><!-- #game-container -->
+</div><!-- #board-wrap -->
 
-    <!-- ╔════════ RESULT / RANKING POPUP ════════╗
-         Hidden by default; shown/filled in by room.js whenever a
-         player finishes all 4 tokens. -->
-    <div class="modal-overlay" id="result-modal" style="display:none;">
-        <div class="modal-card">
-            <div class="modal-icon" id="modal-icon">🏆</div>
-            <h2 class="modal-title" id="modal-title">Player Won!</h2>
-            <div class="modal-ranking" id="modal-ranking"></div>
-            <button class="btn-modal-continue" id="modal-continue-btn" type="button">Continue Game</button>
-            <button class="btn-modal-leave" id="modal-leave-btn" type="button">Leave Game</button>
-        </div>
+</div><!-- #game-container -->
+
+<!-- ╔════════ RESULT / RANKING POPUP ════════╗
+     Hidden by default; shown/filled in by room.js whenever a
+     player finishes all 4 tokens. -->
+<div class="modal-overlay" id="result-modal" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-icon" id="modal-icon">🏆</div>
+        <h2 class="modal-title" id="modal-title">Player Won!</h2>
+        <div class="modal-ranking" id="modal-ranking"></div>
+        <button class="btn-modal-continue" id="modal-continue-btn" type="button">Continue Game</button>
+        <button class="btn-modal-leave" id="modal-leave-btn" type="button">Leave Game</button>
     </div>
+</div>
 
-    <script type="module" src="room.js"></script>
+<script type="module" src="room.js"></script>
 
-    </body>
-    </html>
+</body>
+</html>

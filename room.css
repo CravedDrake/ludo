@@ -245,28 +245,6 @@ body {
   min-height: 2rem;
 }
 
-.dice-row {
-  display: flex; align-items: center; gap: var(--sp-4);
-}
-
-#roll-dice-btn {
-  padding: 0.75rem 2rem; background: var(--accent); color: #fff; border: none;
-  border-radius: var(--r-md); font-family: var(--font-display); font-size: 1.05rem;
-  font-weight: 700; cursor: pointer; letter-spacing: 0.04em;
-  box-shadow: 0 4px 20px rgba(124,58,237,0.45);
-  transition: background var(--ease), transform var(--ease), box-shadow var(--ease), opacity var(--ease);
-}
-#roll-dice-btn:hover:not(:disabled) { background: #6D28D9; transform: translateY(-2px); }
-#roll-dice-btn:disabled { cursor: not-allowed; }
-
-#dice-value {
-  font-family: var(--font-display); font-size: 2.5rem; font-weight: 800;
-  color: var(--text); background: rgba(45,42,110,0.9);
-  border: 1px solid var(--border-light); border-radius: var(--r-md);
-  width: 68px; height: 68px; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-
 /* ── Player legend — color swatch + name, shown during play ──── */
 .player-legend {
   display: flex;
@@ -326,6 +304,169 @@ body {
 
 
 /* ================================================================
+   BOARD WRAP + PER-COLOR DICE BOXES
+   Replaces the single central "Roll Dice" button. Each dice box
+   is an absolutely-positioned tab that visually reads as an
+   extension of the board, sitting right above/below that color's
+   own home corner (red/blue = top corners → boxes stick up;
+   green/yellow = bottom corners → boxes stick down). Red & green
+   are the left-hand corners, so their boxes sit on the left; blue
+   & yellow are the right-hand corners, so theirs sit on the right.
+   ================================================================ */
+
+.board-wrap {
+  position: relative;
+  width: min(96vw, 560px);
+  margin: 64px auto; /* reserves room above/below for the protruding dice boxes */
+}
+
+.dice-box {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--border);
+  z-index: 15;
+  cursor: default;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.dice-box .dice-face {
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
+  transition: opacity 0.2s ease;
+}
+
+/* Top boxes (red / blue) stick up out of the board, flush against its top edge */
+.dice-box--red,
+.dice-box--blue {
+  top: -52px;
+  border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+}
+
+/* Bottom boxes (green / yellow) stick down out of the board, flush against its bottom edge */
+.dice-box--green,
+.dice-box--yellow {
+  bottom: -52px;
+  border-top: none;
+  border-radius: 0 0 var(--r-md) var(--r-md);
+}
+
+/* Horizontal placement: centered over each color's own 6-column
+   corner block (which spans 40% of the board width), so 20% / 80%
+   of the board width is the center of the left / right corners. */
+.dice-box--red    { left:  calc(20% - 29px); }
+.dice-box--green   { left:  calc(20% - 29px); }
+.dice-box--blue   { right: calc(20% - 29px); }
+.dice-box--yellow { right: calc(20% - 29px); }
+
+/* Color tints matching each corner's own zone color */
+.dice-box--red    { background: rgba(239, 68, 68, 0.28);  border-color: rgba(239, 68, 68, 0.65); }
+.dice-box--blue   { background: rgba( 59,130, 246, 0.28); border-color: rgba( 59,130, 246, 0.65); }
+.dice-box--green  { background: rgba( 34,197,  94, 0.28); border-color: rgba( 34,197,  94, 0.65); }
+.dice-box--yellow { background: rgba(234,179,   8, 0.28); border-color: rgba(234,179,   8, 0.65); }
+
+/* Seat has no player joined — dim it out and make it inert */
+.dice-box--empty {
+  opacity: 0.16;
+  filter: grayscale(1);
+}
+
+/* Not this color's turn right now — dimmed but still visible */
+.dice-box.dice-idle {
+  opacity: 0.45;
+}
+
+/* This color's turn right now — glowing + gently pulsing */
+.dice-box.dice-active {
+  opacity: 1;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 0 20px rgba(139,92,246,0.55);
+  animation: diceBoxPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes diceBoxPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+
+/* Only the LOCAL player's own active dice box is actually clickable */
+.dice-box--mine.dice-active {
+  cursor: pointer;
+}
+
+/* Rolling animation — smooth rotation + slight bounce/scale on the face image.
+   NEW: also block clicks while a roll (local or synced from another device)
+   is in progress, so it can't be double-triggered or clicked mid-spin. */
+.dice-box.dice-rolling {
+  pointer-events: none;
+}
+.dice-box.dice-rolling .dice-face {
+  animation: diceRollSpin 0.8s ease-in-out infinite;
+}
+
+@keyframes diceRollSpin {
+  0%   { transform: rotate(0deg)   scale(1);    }
+  25%  { transform: rotate(95deg)  scale(1.15); }
+  50%  { transform: rotate(190deg) scale(0.92); }
+  75%  { transform: rotate(285deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1);    }
+}
+
+/* ── NEW: per-color turn-timer badge ─────────────────────────────
+   Small clock chip tucked into the corner of each dice box, showing
+   the 45s countdown for whoever's turn it currently is. Styled to
+   blend into the dice box rather than stand out as its own widget —
+   dark glass chip by default, only turning red/pulsing as a gentle
+   urgency cue once time is running low. */
+.dice-timer {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  background: rgba(15, 12, 40, 0.85);
+  border: 1.5px solid rgba(255,255,255,0.25);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Shown only for whichever color's turn is currently active */
+.dice-timer--active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Gentle low-time warning — last 10 seconds of the turn */
+.dice-timer--warning {
+  background: rgba(220,38,38,0.92);
+  border-color: rgba(255,255,255,0.5);
+  animation: timerWarningPulse 0.6s ease-in-out infinite;
+}
+
+@keyframes timerWarningPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+
+
+/* ================================================================
    LUDO BOARD — 15×15 CSS grid
    CRITICAL: position:relative so tokens (position:absolute) are
    contained inside the board element.
@@ -336,8 +477,8 @@ body {
   display: grid;
   grid-template-columns: repeat(15, 1fr);
   grid-template-rows:    repeat(15, 1fr);
-  width:  min(96vw, 560px);
-  height: min(96vw, 560px);
+  width:  100%;
+  aspect-ratio: 1 / 1;
   border: 3px solid var(--border);
   border-radius: var(--r-md);
   overflow: hidden;
@@ -436,10 +577,15 @@ body {
 .green-inner  { background: rgba( 34,197, 94, 0.12); }
 .yellow-inner { background: rgba(234,179,  8, 0.12); }
 
-/* ── Home circles ─────────────────────────────────────────────── */
+/* ── Home squares (previously circles) ────────────────────────── */
+/* NEW: changed from a circle (border-radius:50%) to a rounded
+   square, per request. This is now purely a decorative background
+   behind the "parked" tokens — FINISHED tokens no longer pile up
+   in here (that was the cause of the "circle disappearing" look);
+   they're routed to individual finish-slot cells instead (below). */
 .home-circle {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--r-md);
   z-index: 2;
   pointer-events: none; /* tokens on top handle clicks */
 }
@@ -479,6 +625,18 @@ body {
   background: rgba(234,179,8, 0.25);
   border: 2px solid rgba(234,179,8, 0.5);
   box-shadow: 0 0 20px rgba(234,179,8,0.2);
+}
+
+/* NEW: subtle marker on the outer-ring cells that act as individual
+   finish slots (added via JS, see FINISH_SLOT_CELLS in room.js), so
+   it's visible even before any token has finished there. */
+.finish-slot::after {
+  content: '🏁';
+  position: absolute;
+  font-size: clamp(7px, 1.3vw, 11px);
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* ── Player name labels ───────────────────────────────────────── */
@@ -595,6 +753,13 @@ body {
   .player-slot__color { width: 36px; height: 36px; }
   .legend-item { font-size: 0.78rem; padding: 5px 10px; }
   .home-name-label { font-size: 7px; }
+
+  /* shrink the dice boxes + reserved margin on small screens */
+  .board-wrap { margin: 50px auto; }
+  .dice-box { width: 46px; height: 46px; }
+  .dice-box--red, .dice-box--blue { top: -40px; }
+  .dice-box--green, .dice-box--yellow { bottom: -40px; }
+  .dice-timer { min-width: 18px; height: 18px; font-size: 0.58rem; top: -6px; right: -6px; }
 }
 @media (max-width: 360px) {
   body { padding: var(--sp-3) var(--sp-2); }
