@@ -521,6 +521,42 @@
     </div>
 </div>
 
+<!-- ╔════════ NEW: LIVE ROOM CHAT ════════╗
+     Real-time chat scoped to this room's code (rooms/ROOM_CODE/chat).
+     Visible from the moment the page loads — readable in the waiting
+     room, not just once the game starts. Sending a message requires
+     having actually joined a seat (enforced in room.js/sendMessage()).
+     All wiring — listeners, send/receive, rate limiting, validation,
+     auto-scroll, unread badge — lives in room.js under the "LIVE TEXT
+     CHAT SYSTEM" section. Nothing here touches the game/board markup
+     above. -->
+
+<button class="chat-toggle-btn" id="chat-toggle-btn" type="button" aria-label="Open chat">
+    💬
+    <span class="chat-unread-badge" id="chat-unread-badge"></span>
+</button>
+
+<div class="chat-panel" id="chat-panel">
+    <div class="chat-panel__header">
+        <span class="chat-panel__title">💬 Room Chat</span>
+        <button class="chat-close-btn" id="chat-close-btn" type="button" aria-label="Close chat">✕</button>
+    </div>
+
+    <div class="chat-messages" id="chat-messages"></div>
+
+    <div class="chat-input-row">
+        <textarea
+            id="chat-input"
+            class="chat-input"
+            placeholder="Type a message…"
+            maxlength="200"
+            rows="1"
+        ></textarea>
+        <button class="chat-send-btn" id="chat-send-btn" type="button" aria-label="Send message">➤</button>
+    </div>
+    <div class="chat-char-counter" id="chat-char-counter">0/200</div>
+</div>
+
 <script type="module" src="room.js"></script>
 
 </body>
