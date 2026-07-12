@@ -3,7 +3,11 @@ import {
     ref,
     get,
     update,
-    onValue
+    onValue,
+    push,
+    onChildAdded,
+    query,
+    limitToLast
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 
 /* =========================================================
@@ -34,7 +38,7 @@ const isHost = sessionStorage.getItem("isHost") === "true";
    TIMING CONSTANTS
 ========================================================= */
 
-const ROLL_DURATION = 1000; // ms — how long the synced dice-spin animation runs
+const ROLL_DURATION = 1800; // ms — how long the synced dice-spin animation runs
 const TURN_SECONDS  = 45;   // per-turn countdown shown on each color's timer badge
 const STALE_ROLL_MS = ROLL_DURATION + 4000; // safety window before any client can clear a stuck roll
 
@@ -133,6 +137,46 @@ function playDiceSound() {
         });
     }
 }
+
+/* =========================================================
+   DICE IMAGE PRELOADING
+   Previously the six dice-face PNGs were only ever referenced via
+   `img.src = "images/dice/N.png"` at roll time. The very first time
+   a given face number was needed, the browser had to fetch it off
+   disk/network and decode it before it could paint — which is
+   exactly the "old face lingers for 0.5–1s" symptom, since the
+   <img> keeps showing whatever it last painted until the new bitmap
+   is ready. The random face-cycling during the animation helped
+   warm the cache for *some* faces, but not reliably all 6, and not
+   before the very first roll of a session.
+
+   Fix: eagerly create an Image() for every face on page load and
+   let the browser fetch+decode them into cache immediately. By the
+   time any roll happens, every face is already decoded — swapping
+   `img.src` afterwards is then just a cache hit and paints on the
+   very next frame, no network/decode delay.
+========================================================= */
+
+const DICE_FACE_COUNT = 6;
+const diceFacePreloaded = new Array(DICE_FACE_COUNT + 1).fill(false); // 1-indexed
+
+function diceImgSrc(face) {
+    return `images/dice/${face}.png`;
+}
+
+(function preloadDiceImages() {
+    for (let face = 1; face <= DICE_FACE_COUNT; face++) {
+        const img = new Image();
+        img.onload = () => { diceFacePreloaded[face] = true; };
+        img.src = diceImgSrc(face);
+        // decode() (where supported) forces the browser to fully
+        // decode the bitmap off the main thread ahead of time, not
+        // just download the bytes — belt-and-braces on top of onload.
+        if (img.decode) {
+            img.decode().catch(() => { /* ignore — onload already covers us */ });
+        }
+    }
+})();
 
 /* =========================================================
    BOARD PATH — matches the real 15x15 grid in room.html
@@ -409,6 +453,7 @@ function handleResultPopups(game, players) {
 
 async function leaveRoom() {
     const mySlot = getMySlot();
+    const myName = sessionStorage.getItem("playerName"); // NEW — used for the chat announcement below
 
     if (mySlot) {
         try {
@@ -416,7 +461,11 @@ async function leaveRoom() {
         } catch (e) {
             console.warn("Could not remove player from room:", e);
         }
+        // NEW: let everyone else's chat know this player left
+        if (myName) pushSystemMessage(`🔴 ${myName} left the room`);
     }
+
+    destroyChat(); // NEW: detach the chat listener before navigating away — prevents memory leaks
 
     sessionStorage.clear();
     window.location.href = "index.html";
@@ -504,6 +553,9 @@ async function joinRoom() {
 
         joinCard.style.display = "none";
 
+        // NEW: announce this player joining to everyone's chat
+        pushSystemMessage(`🟢 ${name} joined the room`);
+
     } catch (err) {
         console.error("Join failed:", err);
         alert("Failed to join room.");
@@ -544,6 +596,9 @@ startGameBtn?.addEventListener("click", async () => {
         "game/tokens/player3": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player4": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } }
     });
+
+    // NEW: announce game start to everyone's chat
+    pushSystemMessage("🎲 Game started!");
 });
 
 /* =========================================================
@@ -552,19 +607,22 @@ startGameBtn?.addEventListener("click", async () => {
    of a purely local animation. Whoever clicks their own dice box
    writes `{ slot, startedAt }` to the room; EVERY connected client
    (including the roller) reacts to that write by spinning the same
-   dice box for the same ~1s window, driven off the same `startedAt`
-   timestamp so they all end together. Only the roller's own client
-   then computes the actual result and writes it back, clearing
-   `game/rolling`. This is what makes the roll — and its result —
-   show up in real time on every device instead of just the
-   roller's.
+   dice box for a full ROLL_DURATION (1.5s) local timer of their own
+   — not clock-synced against the roller's `startedAt`, since doing
+   the math that way turned out fragile (device clock drift and
+   asymmetric network latency for the start-vs-stop writes could
+   make a spectator's remaining time compute to near-zero, so their
+   animation barely played). Only the roller's own client computes
+   the actual result and writes it back, clearing `game/rolling`.
+   This is what makes the roll — and its result — show up in real
+   time on every device instead of just the roller's.
 ========================================================= */
 
 let currentAnimatingSlot = null; // slot currently showing the synced roll animation locally
 let diceAnimInterval      = null; // face-cycling interval for the active animation
 let animationStopTimeout  = null; // timeout that ends the active animation
 
-function startDiceAnimation(slot, startedAt) {
+function startDiceAnimation(slot) {
     const box = diceBoxes[slot];
     const img = diceImgs[slot];
     if (!box || !img) return;
@@ -573,17 +631,25 @@ function startDiceAnimation(slot, startedAt) {
     box.classList.add("dice-rolling");
     playDiceSound();
 
+    // Face-changing speed is unchanged — same 70-90ms cadence, just
+    // running for a longer total window now (ROLL_DURATION = 1500ms).
     diceAnimInterval = setInterval(() => {
         const randomFace = Math.floor(Math.random() * 6) + 1;
-        img.src = `images/dice/${randomFace}.png`;
+        img.src = diceImgSrc(randomFace);
     }, 70 + Math.random() * 20);
 
-    const elapsed   = Date.now() - startedAt;
-    const remaining = Math.max(0, ROLL_DURATION - elapsed);
-
+    // Always run the FULL animation locally from the moment THIS
+    // device starts it, rather than trying to compute a shortened
+    // "remaining" time based on the roller's startedAt clock. Every
+    // client — roller included — now just plays a full ROLL_DURATION
+    // spin. Since the real dice value is written to Firebase
+    // separately once the roller's own animation finishes, it will
+    // typically arrive on other devices right around when their own
+    // local timer ends too (both messages travel over a similar
+    // network path), without the fragile clock-sync math.
     animationStopTimeout = setTimeout(() => {
         finishDiceAnimation(slot);
-    }, remaining);
+    }, ROLL_DURATION);
 }
 
 function stopDiceAnimation(slot) {
@@ -604,7 +670,15 @@ function finishDiceAnimation(slot) {
 }
 
 /* Keeps every client's local animation in sync with `game.rolling`.
-   Called on every realtime update. */
+   Called on every realtime update, BEFORE showGameUI() in the same
+   onValue callback. When `rolling` clears, this stops the local
+   spin animation; updateDiceBoxes() (called moments later by
+   showGameUI() in that same synchronous callback) then paints the
+   real `game.diceValue` face, since currentAnimatingSlot has already
+   been reset to null here. That handoff was already gap-free timing
+   -wise — the missing piece was that the face it paints now comes
+   from the preloaded image cache instead of a cold fetch, so on
+   slower connections it no longer stalls waiting for the PNG. */
 function syncDiceRollingAnimation(game) {
     const rolling = game.rolling;
 
@@ -616,7 +690,7 @@ function syncDiceRollingAnimation(game) {
     if (rolling.slot === currentAnimatingSlot) return; // already animating this exact roll
 
     if (currentAnimatingSlot) stopDiceAnimation(currentAnimatingSlot);
-    startDiceAnimation(rolling.slot, rolling.startedAt);
+    startDiceAnimation(rolling.slot);
 }
 
 /* Called ONLY by the client whose color just finished rolling.
@@ -631,7 +705,7 @@ function syncDiceRollingAnimation(game) {
    connection, but very noticeable extra delay on phone wifi/cellular.
    Since the listener already has the up-to-date state, we can skip
    straight to the write. */
-async function finalizeRoll(mySlot) {
+function finalizeRoll(mySlot) {
     const room = latestRoom;
     const game = latestGame;
     const turnOrder = (room && room.turnOrder) || ["player1", "player2", "player3", "player4"];
@@ -639,32 +713,49 @@ async function finalizeRoll(mySlot) {
     // Safety: only finalize if this roll is still genuinely ours
     if (!game || !game.rolling || game.rolling.slot !== mySlot) return;
     if (game.currentTurn !== mySlot) {
-        await update(roomRef, { "game/rolling": null });
+        // Not our turn anymore for some reason — just clear the stuck
+        // rolling flag. Not awaited: nothing local depends on this
+        // write completing, so don't hold up the caller for it.
+        update(roomRef, { "game/rolling": null }).catch(err =>
+            console.error("Failed to clear stale rolling flag:", err)
+        );
         return;
     }
 
+    // --- STEP 1: compute the result (pure, synchronous, instant) ---
     const dice = Math.floor(Math.random() * 6) + 1;
-    const img  = diceImgs[mySlot];
-    if (img) img.src = `images/dice/${dice}.png`;
 
+    // --- STEP 2: paint it locally RIGHT NOW, before touching Firebase ---
+    // Because every face was preloaded+decoded up front, this src swap
+    // is a cache hit and shows up on the very next frame — no more
+    // gap where the last mid-animation random face lingers on screen.
+    const img = diceImgs[mySlot];
+    if (img) img.src = diceImgSrc(dice);
+
+    // --- STEP 3: sync to Firebase in the background (fire-and-forget) ---
+    // Deliberately NOT awaited and finalizeRoll is no longer async:
+    // the local dice face above is already final by the time this
+    // line runs, so there is nothing left for the local UI to wait
+    // on. Other clients pick up the change the moment it lands via
+    // their own onValue listener, same as before.
     if (!hasLegalMove(dice, game.tokens[mySlot])) {
         const finishOrder = game.finishOrder || [];
         const nextTurn    = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
-        await update(roomRef, {
+        update(roomRef, {
             "game/rolling":       null,
             "game/diceValue":     dice,
             "game/diceRolled":    false,
             "game/currentTurn":   nextTurn,
             "game/turnStartedAt": Date.now()
-        });
+        }).catch(err => console.error("Failed to sync no-legal-move roll:", err));
         return;
     }
 
-    await update(roomRef, {
+    update(roomRef, {
         "game/rolling":    null,
         "game/diceValue":  dice,
         "game/diceRolled": true
-    });
+    }).catch(err => console.error("Failed to sync roll result:", err));
 }
 
 /* Click handler shared by all 4 dice boxes. Only fires for real if
@@ -811,6 +902,13 @@ async function performMove(player, tokenKey, room) {
     };
 
     await update(roomRef, moveUpdates);
+
+    // NEW: announce the winner to everyone's chat once the game ends
+    if (gameOver && finalOrder && finalOrder.length) {
+        const winnerSlot = finalOrder[0];
+        const winnerName = room.players[winnerSlot]?.name || PLAYER_LABELS[winnerSlot];
+        pushSystemMessage(`🏆 ${winnerName} wins!`);
+    }
 }
 
 /* =========================================================
@@ -1004,6 +1102,12 @@ onValue(roomRef, (snap) => {
    SHOW GAME UI
 ========================================================= */
 
+// Tracks the last game-state "shape" we actually rendered the board
+// for, so we can skip the expensive DOM work below when nothing that
+// affects the board changed (e.g. a rolling-flag write, which fires
+// twice per roll but never moves a token).
+let lastBoardRenderSignature = null;
+
 function showGameUI(room, players) {
     document.querySelector(".page").style.display = "none";
     gameContainer.style.display = "block";
@@ -1019,8 +1123,26 @@ function showGameUI(room, players) {
     }
 
     updateDiceBoxes(game, players, mySlot);
-    renderTokens(game);
-    wireTokenClicks(game, mySlot);
+
+    // Only the fields that actually affect what's drawn on the board
+    // or which tokens are clickable — NOT game.rolling, which changes
+    // twice per roll but never touches a token.
+    const signature = JSON.stringify({
+        tokens:     game.tokens,
+        diceValue:  game.diceValue,
+        diceRolled: game.diceRolled,
+        gameOver:   game.gameOver
+    });
+
+    if (signature !== lastBoardRenderSignature) {
+        lastBoardRenderSignature = signature;
+        renderTokens(game);
+    }
+
+    // Cheap (just classList/cursor toggles on this player's 4 tokens),
+    // no DOM rebuild — safe to run every time regardless of signature.
+    updateTokenClickability(game, mySlot);
+
     updatePlayerLegend(players, game.currentTurn, game.winner);
     updateHomeLabels(players);
 }
@@ -1058,7 +1180,7 @@ function updateDiceBoxes(game, players, mySlot) {
         if (currentAnimatingSlot === slot) continue;
 
         if (isThisTurn) {
-            img.src = game.diceValue ? `images/dice/${game.diceValue}.png` : "images/dice/1.png";
+            img.src = game.diceValue ? diceImgSrc(game.diceValue) : diceImgSrc(1);
         }
     }
 }
@@ -1199,18 +1321,44 @@ function spreadStackedTokens() {
 }
 
 /* =========================================================
-   WIRE TOKEN CLICKS
-   NEW: also toggles the "clickable" class (pulsing highlight,
-   already defined in room.css) on exactly the tokens that have a
-   legal move right now, so it's obvious at a glance what you can
-   move after rolling.
+   TOKEN CLICK HANDLING
+   Previously this rebuilt all 16 token DOM nodes (clone + replace)
+   on every single realtime update, purely to avoid stacking up
+   duplicate click listeners. That's real DOM work happening on
+   every dice-rolling flag change too, not just moves — competing
+   with the roll animation for main-thread time and showing up as
+   intermittent stutter depending on device load/timing.
+
+   Fix: bind ONE delegated click listener on the board itself, once,
+   at startup. It never needs to be re-bound because tokens stay
+   inside #ludo-board even when JS moves them between cells. Legality
+   highlighting (the "clickable" class) is still recomputed every
+   render since which tokens are legal genuinely does change — but
+   that's just 4 classList/cursor toggles, not a DOM rebuild.
 ========================================================= */
 
-function wireTokenClicks(game, mySlot) {
-    document.querySelectorAll(".token").forEach(el => {
-        el.replaceWith(el.cloneNode(true));
+let tokenClickDelegationBound = false;
+
+function bindTokenClickDelegation() {
+    if (tokenClickDelegationBound) return;
+    const board = document.getElementById("ludo-board");
+    if (!board) return;
+
+    board.addEventListener("click", (e) => {
+        const tokenEl = e.target.closest(".token");
+        if (!tokenEl) return;
+
+        const match = tokenEl.id.match(/^(player\d)-(t\d)$/);
+        if (!match) return;
+
+        const [, player, tokenKey] = match;
+        handleTokenClick(player, tokenKey);
     });
 
+    tokenClickDelegationBound = true;
+}
+
+function updateTokenClickability(game, mySlot) {
     // Clear stale highlighting on everyone's tokens first
     for (let i = 1; i <= 4; i++) {
         const slot   = "player" + i;
@@ -1245,9 +1393,12 @@ function wireTokenClicks(game, mySlot) {
 
         el.classList.toggle("clickable", isLegal);
         el.style.cursor = isLegal ? "pointer" : "default";
-        el.addEventListener("click", () => handleTokenClick(mySlot, tokenKey));
     }
 }
+
+// Bind once at startup — #ludo-board exists in the DOM immediately
+// (it's just display:none inside #game-container until play starts).
+bindTokenClickDelegation();
 
 /* =========================================================
    PLAYER SLOT UI
@@ -1277,3 +1428,308 @@ function updatePlayerSlots(players) {
 }
 
 window.handleTokenClick = handleTokenClick;
+
+/* =========================================================
+   NEW: LIVE TEXT CHAT SYSTEM
+   Self-contained real-time chat scoped to this room via
+   rooms/ROOM_CODE/chat. Nothing above this section was touched to
+   add it — the only changes elsewhere are three one-line
+   pushSystemMessage(...) calls (join/leave/win) and one
+   destroyChat() call in leaveRoom(), all clearly marked "NEW" above.
+
+   Firebase shape:
+     rooms/ROOM_CODE/chat/<pushId>: {
+         sender:      "player1".."player4" | "system",
+         playerName:  string (omitted for system messages),
+         message:     string,
+         timestamp:   number (ms)
+     }
+
+   Reusable functions (per spec):
+     initializeChat()    — attach the onChildAdded listener
+     sendMessage()        — validate, rate-limit, and push the local
+                             player's message
+     addMessage()          — render one incoming/local message bubble
+     addSystemMessage()    — render a system message locally only
+     loadRecentMessages()  — (folded into initializeChat(); see note
+                             below) fetches only the newest 100
+     destroyChat()         — detach the listener, called on leaveRoom()
+========================================================= */
+
+const chatRef = ref(db, `rooms/${roomCode}/chat`);
+
+const CHAT_HISTORY_LIMIT   = 100;  // "load only the newest 100 messages"
+const CHAT_RATE_LIMIT_MS   = 500;  // one message per 500ms per client
+const CHAT_MAX_LENGTH      = 200;  // characters
+const CHAT_NEAR_BOTTOM_PX  = 80;   // "near the bottom" threshold for auto-scroll
+
+const chatToggleBtn   = document.getElementById("chat-toggle-btn");
+const chatPanel       = document.getElementById("chat-panel");
+const chatCloseBtn    = document.getElementById("chat-close-btn");
+const chatMessagesEl  = document.getElementById("chat-messages");
+const chatInput       = document.getElementById("chat-input");
+const chatSendBtn     = document.getElementById("chat-send-btn");
+const chatUnreadBadge = document.getElementById("chat-unread-badge");
+const chatCharCounter = document.getElementById("chat-char-counter");
+
+let chatUnsubscribe   = null; // the onChildAdded detach function, used by destroyChat()
+let chatIsOpen        = false;
+let chatUnreadCount   = 0;
+let lastMessageSentAt = 0;    // client-side rate-limit clock
+
+/* loadRecentMessages() + the "only new messages after that" live
+   feed are the SAME Firebase call: onChildAdded on a query with
+   limitToLast(100) fires once for each of the (up to) 100 existing
+   messages when attached, then fires again for every NEW message
+   pushed afterwards — it never re-downloads the whole chat node on
+   each update, satisfying both the "load only newest 100" and the
+   "onChildAdded only, never onValue for chat" requirements at once. */
+function loadRecentMessages() {
+    return query(chatRef, limitToLast(CHAT_HISTORY_LIMIT));
+}
+
+function initializeChat() {
+    if (!chatMessagesEl) return; // chat markup not present on this page — no-op
+
+    const chatQuery = loadRecentMessages();
+
+    chatUnsubscribe = onChildAdded(chatQuery, (snap) => {
+        addMessage(snap.val(), snap.key);
+    });
+}
+
+function destroyChat() {
+    if (chatUnsubscribe) {
+        chatUnsubscribe(); // detaches the Firebase listener — prevents memory leaks
+        chatUnsubscribe = null;
+    }
+}
+
+function isChatNearBottom() {
+    if (!chatMessagesEl) return true;
+    const distance = chatMessagesEl.scrollHeight - chatMessagesEl.scrollTop - chatMessagesEl.clientHeight;
+    return distance < CHAT_NEAR_BOTTOM_PX;
+}
+
+function scrollChatToBottom() {
+    if (!chatMessagesEl) return;
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+}
+
+function formatChatTime(timestamp) {
+    const d = new Date(timestamp || Date.now());
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+    return `${hours}:${minutes} ${ampm}`; // e.g. "8:41 PM" — no date, per spec
+}
+
+/* addMessage() — renders one chat bubble (own message, other
+   player's message, or a system pill). Message text is inserted via
+   textContent ONLY, never innerHTML/insertAdjacentHTML — this is
+   what actually prevents HTML/JS injection; raw markup in a message
+   is displayed as literal text, never parsed or executed. */
+function addMessage(data, id) {
+    if (!chatMessagesEl || !data) return;
+
+    const wasNearBottom = isChatNearBottom();
+    const mySlot = getMySlot();
+
+    let bubble;
+
+    if (data.sender === "system") {
+        bubble = document.createElement("div");
+        bubble.className = "chat-system-msg";
+        bubble.textContent = data.message;
+    } else {
+        const isMine = data.sender === mySlot;
+
+        bubble = document.createElement("div");
+        bubble.className = `chat-bubble-row ${isMine ? "chat-bubble-row--mine" : "chat-bubble-row--theirs"}`;
+
+        const bubbleInner = document.createElement("div");
+        bubbleInner.className = `chat-bubble ${isMine ? "chat-bubble--mine" : "chat-bubble--theirs"}`;
+
+        if (!isMine) {
+            const nameEl = document.createElement("div");
+            nameEl.className = "chat-bubble__name";
+            nameEl.style.color = `var(--${COLOR_MAP[data.sender] || "text"})`;
+            nameEl.textContent = data.playerName || "Player";
+            bubbleInner.appendChild(nameEl);
+        }
+
+        const textEl = document.createElement("div");
+        textEl.className = "chat-bubble__text";
+        textEl.textContent = data.message; // plain text only — see comment above
+
+        const timeEl = document.createElement("div");
+        timeEl.className = "chat-bubble__time";
+        timeEl.textContent = formatChatTime(data.timestamp);
+
+        bubbleInner.appendChild(textEl);
+        bubbleInner.appendChild(timeEl);
+        bubble.appendChild(bubbleInner);
+    }
+
+    bubble.classList.add("chat-fade-in"); // smooth message fade-in
+    chatMessagesEl.appendChild(bubble);
+
+    // Unread badge + notification sound — only for genuinely new
+    // messages from someone else, and only while the panel is closed.
+    if (data.sender !== "system" && data.sender !== mySlot && !chatIsOpen) {
+        chatUnreadCount++;
+        updateChatUnreadBadge();
+        playChatNotificationSound();
+    }
+
+    // Auto-scroll: only if the reader was already near the bottom
+    // (or it's their own message — always jump to it).
+    if (wasNearBottom || data.sender === mySlot) {
+        scrollChatToBottom();
+    }
+}
+
+/* Renders a system message locally only (no Firebase write) — kept
+   as its own function per the requested API, though every actual
+   in-game event below goes through pushSystemMessage() instead so
+   every connected client sees it. */
+function addSystemMessage(text) {
+    addMessage({ sender: "system", message: text, timestamp: Date.now() }, `local-${Date.now()}`);
+}
+
+/* Writes a system event (join/leave/game start/win) into the shared
+   chat node so every client's own onChildAdded listener renders it
+   in real time — this is how join/leave/start/win messages reach
+   everyone, not just the client that triggered the event. */
+function pushSystemMessage(text) {
+    push(chatRef, {
+        sender: "system",
+        message: text,
+        timestamp: Date.now()
+    }).catch(err => console.warn("Failed to send system chat message:", err));
+}
+
+function updateChatUnreadBadge() {
+    if (!chatUnreadBadge) return;
+    if (chatUnreadCount > 0) {
+        chatUnreadBadge.textContent = chatUnreadCount > 9 ? "9+" : String(chatUnreadCount);
+        chatUnreadBadge.style.display = "flex";
+    } else {
+        chatUnreadBadge.style.display = "none";
+    }
+}
+
+/* Optional notification sound for incoming messages — synthesized
+   via the same Web Audio context the dice sound already sets up, so
+   no extra sound asset/file is required. Silently skipped if the
+   context isn't running yet (no user gesture has unlocked it) or
+   isn't available at all — never blocks the chat itself. */
+function playChatNotificationSound() {
+    try {
+        if (!audioCtx || audioCtx.state === "suspended") return;
+        const osc  = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+    } catch (e) {
+        // Non-critical — silently ignore
+    }
+}
+
+function openChatPanel() {
+    chatIsOpen = true;
+    chatPanel?.classList.add("chat-panel--open");
+    chatUnreadCount = 0;
+    updateChatUnreadBadge();
+    scrollChatToBottom();
+    chatInput?.focus(); // keeps the typing cursor ready in the input
+}
+
+function closeChatPanel() {
+    chatIsOpen = false;
+    chatPanel?.classList.remove("chat-panel--open");
+}
+
+chatToggleBtn?.addEventListener("click", () => {
+    chatIsOpen ? closeChatPanel() : openChatPanel();
+});
+chatCloseBtn?.addEventListener("click", closeChatPanel);
+
+function updateChatCharCounter() {
+    if (!chatCharCounter || !chatInput) return;
+    chatCharCounter.textContent = `${chatInput.value.length}/${CHAT_MAX_LENGTH}`;
+}
+
+/* Lightweight auto-grow for the input — stays single-line by
+   default, expands up to ~4 lines for multi-line (Shift+Enter)
+   messages, then scrolls internally. */
+function autoGrowChatInput() {
+    if (!chatInput) return;
+    chatInput.style.height = "auto";
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 96) + "px";
+}
+
+async function sendMessage() {
+    if (!chatInput) return;
+
+    const mySlot = getMySlot();
+    if (!mySlot) return; // must have joined a seat to chat
+
+    // Validation: block empty / whitespace-only messages, trim
+    // surrounding whitespace, enforce the 200-char cap.
+    const raw = chatInput.value.trim();
+    if (!raw) return;
+    if (raw.length > CHAT_MAX_LENGTH) return; // input also has maxlength=200 as a first line of defense
+
+    // Rate limiting — one message per 500ms per client
+    const now = Date.now();
+    if (now - lastMessageSentAt < CHAT_RATE_LIMIT_MS) return;
+    lastMessageSentAt = now;
+
+    const playerName = sessionStorage.getItem("playerName") || PLAYER_LABELS[mySlot];
+
+    chatInput.value = "";
+    updateChatCharCounter();
+    autoGrowChatInput();
+
+    try {
+        // push() auto-generates the chronologically-sortable message ID —
+        // IDs are never hand-rolled, per spec.
+        await push(chatRef, {
+            sender: mySlot,
+            playerName,
+            message: raw,
+            timestamp: Date.now()
+        });
+    } catch (err) {
+        console.error("Failed to send chat message:", err);
+    }
+
+    chatInput.focus(); // typing cursor stays in the input after sending
+}
+
+chatSendBtn?.addEventListener("click", sendMessage);
+chatInput?.addEventListener("input", () => {
+    updateChatCharCounter();
+    autoGrowChatInput();
+});
+
+// Enter sends the message; Shift+Enter inserts a newline instead.
+chatInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// Chat is readable from the moment the page loads — waiting room
+// included, not just once the game starts — so start the listener
+// right away rather than gating it behind joining a seat.
+initializeChat();
