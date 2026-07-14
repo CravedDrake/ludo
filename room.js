@@ -148,6 +148,52 @@ function playDiceSound() {
 }
 
 /* =========================================================
+   NEW: TAP SOUND — one hop = one tap. Same Web Audio approach as
+   the dice sound above (decode once into a buffer, fire a fresh
+   AudioBufferSourceNode per hop) so back-to-back taps fired quickly
+   during a multi-step move never get cut off, stolen, or laggy —
+   each hop gets its own independent, near-instant playback.
+========================================================= */
+
+let tapSoundBuffer = null;
+// const tapSoundFallback = new Audio("sounds/tap.mp3");
+// tapSoundFallback.preload = "auto";
+
+(async function initTapAudio() {
+    try {
+        // Reuse the same AudioContext the dice sound already created
+        // (falls back to making one here if that init failed/hasn't run yet).
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // const resp = await fetch("sounds/tap.mp3");
+        const arrayBuffer = await resp.arrayBuffer();
+        tapSoundBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.warn("Web Audio tap-sound init failed, will use fallback <audio>:", e);
+        tapSoundBuffer = null;
+    }
+})();
+
+function playTapSound() {
+    if (audioCtx && tapSoundBuffer) {
+        if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = tapSoundBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+    } else {
+        // Clone the element so 2-3 taps fired in quick succession each
+        // get their own independent playback instead of one shared
+        // <audio> stealing/restarting itself via currentTime = 0.
+        // const clone = tapSoundFallback.cloneNode();
+        // clone.play().catch(() => {
+        //     // Autoplay restrictions — safe to ignore, hop still plays visually
+        // });
+    }
+}
+
+/* =========================================================
    3D DICE — ROTATION ENGINE
    Replaces the old unicode-glyph swap (⚀–⚅) with a real CSS 3D
    cube per color (markup: .dice-box > .die-scene > .die-cube > 6x
@@ -1282,47 +1328,212 @@ function updateHomeLabels(players) {
 
 /* =========================================================
    RENDER TOKENS — placed onto the real c-ROW-COL grid cells
+
+   NEW: Token movement is now animated as a series of hops instead
+   of an instant DOM re-parent. Each realtime update is diffed
+   against the PREVIOUS `game.tokens` snapshot to detect genuine
+   forward moves. A token that advanced N cells forward hops through
+   each of those N intermediate cells one at a time — 1 step is a
+   single hop straight to the destination and stop; 2 steps hops
+   through the in-between cell, then hops to the destination and
+   stops; 3 steps hops, hops, hops, then stops — always exactly
+   matching the dice count, with the tap sound played once per hop.
+
+   Captures, resets, and a fresh game start (index goes DOWN, e.g.
+   captured back to -1, or 56 -> -1 on a new game) are NEVER
+   animated — those still snap instantly, since there's no sensible
+   "forward path" to hop along for them.
 ========================================================= */
 
-function renderTokens(game) {
+let previousTokensSnapshot = null; // last game.tokens we rendered, for diffing
+
+// Per-hop animation duration. Deliberately shorter than the ~1s tap
+// clip itself (same overlapping-sound approach already used for the
+// dice roll sound) so even a 6-step move still feels snappy, while
+// each tap still rings out naturally without getting cut off.
+const HOP_STEP_MS = 550;
+
+/* Same placement rules the previous renderTokens() had inline (home
+   park slot / individual finish slot / track-or-home-stretch cell),
+   factored out so the hop animation can look up a token's TRUE
+   final cell — including its correctly-ordered finish-slot — without
+   duplicating that bookkeeping. */
+function computeTokenPlacements(game) {
+    const placements = {};
+
     for (const player in game.tokens) {
         const tokenKeys = Object.keys(game.tokens[player]);
-        let   homeSlot   = 0; // parked-at-home slot index (index === -1)
-        let   finishSlot = 0; // individual finish-slot index (index === 56)
+        let homeSlot   = 0;
+        let finishSlot = 0;
 
         for (const tokenKey of tokenKeys) {
-            const el = document.getElementById(`${player}-${tokenKey}`);
-            if (!el) continue;
-
             const index = game.tokens[player][tokenKey].index;
+            let cellId = null;
 
             if (index === -1) {
-                const cellId = HOME_PARK_CELLS[player]?.[homeSlot];
+                cellId = HOME_PARK_CELLS[player]?.[homeSlot];
                 homeSlot++;
-                const cell = cellId ? document.getElementById(cellId) : null;
-                if (cell) cell.appendChild(el);
             } else if (index === 56) {
-                /* Finished tokens go to their own individual outer-ring
-                   slot cell instead of piling into the shared home circle. */
-                const cellId = FINISH_SLOT_CELLS[player]?.[finishSlot];
+                cellId = FINISH_SLOT_CELLS[player]?.[finishSlot];
                 finishSlot++;
-                const cell = cellId ? document.getElementById(cellId) : null;
-                if (cell) {
-                    cell.appendChild(el);
-                } else {
-                    // Fallback, in case more than 4 slots were ever needed
-                    const homeCircle = document.getElementById(`hc-${COLOR_MAP[player]}`);
-                    if (homeCircle) homeCircle.appendChild(el);
-                }
+                if (!cellId) cellId = `hc-${COLOR_MAP[player]}`; // fallback, see original comment
             } else {
                 const coord = getAbsoluteCoord(player, index);
-                const cell  = getCellEl(coord);
-                if (cell) cell.appendChild(el);
+                cellId = coord ? `c-${coord[0]}-${coord[1]}` : null;
+            }
+
+            placements[`${player}-${tokenKey}`] = cellId;
+        }
+    }
+
+    return placements;
+}
+
+/* Cell id for one INTERMEDIATE step of a hop (never the final
+   landing cell — that always comes from computeTokenPlacements() so
+   it correctly resolves to that token's own individual finish-slot
+   cell when the move ends on 56). */
+function getIntermediateCellId(player, index) {
+    if (index >= 0 && index <= 50) {
+        const coord = getAbsoluteCoord(player, index);
+        return coord ? `c-${coord[0]}-${coord[1]}` : null;
+    }
+    if (index >= 51 && index <= 55) {
+        const coord = HOME_STRETCH[player][index - 51];
+        return coord ? `c-${coord[0]}-${coord[1]}` : null;
+    }
+    return null;
+}
+
+/* FLIP-style single hop: measure where `el` visually is right now,
+   move it in the DOM to `destCell`, measure where it ends up there,
+   then animate the visual gap between those two points using the
+   Web Animations API — with a scaled-up midpoint frame so it reads
+   as a little jump/bounce rather than a flat slide. */
+function hopTokenToCell(el, destCell, durationMs) {
+    return new Promise((resolve) => {
+        if (!el || !destCell) { resolve(); return; }
+
+        const startRect = el.getBoundingClientRect();
+        destCell.appendChild(el);
+        const endRect = el.getBoundingClientRect();
+
+        const dx = startRect.left - endRect.left;
+        const dy = startRect.top  - endRect.top;
+
+        if (!dx && !dy) { resolve(); return; }
+
+        const hopHeight = Math.max(10, Math.min(startRect.width * 0.9, 18));
+        el.style.zIndex = "40"; // stay above everything else mid-flight
+
+        let settled = false;
+        const settle = () => {
+            if (settled) return;
+            settled = true;
+            el.style.transform = "";
+            el.style.zIndex    = "";
+            resolve();
+        };
+
+        try {
+            const anim = el.animate([
+                { transform: `translate(${dx}px, ${dy}px) scale(1)`,                             offset: 0   },
+                { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - hopHeight}px) scale(1.18)`,  offset: 0.5 },
+                { transform: "translate(0px, 0px) scale(1)",                                      offset: 1   }
+            ], { duration: durationMs, easing: "ease-in-out", fill: "forwards" });
+            anim.onfinish = settle;
+        } catch (e) {
+            settle();
+            return;
+        }
+
+        setTimeout(settle, durationMs + 100); // safety net in case onfinish never fires
+    });
+}
+
+/* Steps a token through every intermediate cell between fromIndex
+   and toIndex, one hop at a time, playing the tap sound once per
+   hop — always exactly matching the dice count that produced this
+   move (1 step = 1 tap/hop, 2 steps = 2 taps/hops, etc). */
+async function animateTokenHop(player, tokenKey, fromIndex, toIndex, finalCellId) {
+    const el = document.getElementById(`${player}-${tokenKey}`);
+    if (!el) return;
+
+    // Clear any leftover stacked-token offsets so the FLIP measurements
+    // below reflect the token's true resting position; spreadStackedTokens()
+    // re-applies stacking once it's landed, if the destination is still shared.
+    el.style.position = "";
+    el.style.top       = "";
+    el.style.left      = "";
+    el.style.width     = "";
+    el.style.height    = "";
+
+    const steps = toIndex - fromIndex;
+
+    for (let i = 1; i <= steps; i++) {
+        const intermediateIndex = fromIndex + i;
+        const cellId = (intermediateIndex === toIndex)
+            ? finalCellId
+            : getIntermediateCellId(player, intermediateIndex);
+
+        const cell = cellId ? document.getElementById(cellId) : null;
+        if (!cell) continue;
+
+        playTapSound();
+        await hopTokenToCell(el, cell, HOP_STEP_MS);
+    }
+
+    spreadStackedTokens(); // re-settle neatly if it landed on an occupied cell
+}
+
+function renderTokens(game) {
+    const placements      = computeTokenPlacements(game);
+    const prevTokens       = previousTokensSnapshot;
+    const movesToAnimate   = [];
+
+    if (prevTokens) {
+        for (const player in game.tokens) {
+            for (const tokenKey in game.tokens[player]) {
+                const oldIndex = prevTokens[player]?.[tokenKey]?.index;
+                const newIndex = game.tokens[player][tokenKey].index;
+
+                if (typeof oldIndex !== "number") continue;
+
+                // Only a genuine forward move (a real dice roll, 1-6
+                // steps) gets hop-animated. Anything that moved
+                // BACKWARD — a capture sending it to -1, or a brand
+                // new game resetting 56 -> -1 — still snaps instantly,
+                // since there's no forward path to hop along.
+                if (newIndex > oldIndex && (newIndex - oldIndex) <= 6) {
+                    movesToAnimate.push({ player, tokenKey, from: oldIndex, to: newIndex });
+                }
             }
         }
     }
 
+    previousTokensSnapshot = JSON.parse(JSON.stringify(game.tokens));
+
+    const animatingIds = new Set(movesToAnimate.map(m => `${m.player}-${m.tokenKey}`));
+
+    // Everything NOT being hop-animated (captures, a fresh-game reset,
+    // or simply the very first render) is placed straight onto its
+    // final cell, exactly like the original instant version.
+    for (const key in placements) {
+        if (animatingIds.has(key)) continue;
+        const el     = document.getElementById(key);
+        const cellId = placements[key];
+        const cell   = cellId ? document.getElementById(cellId) : null;
+        if (el && cell) cell.appendChild(el);
+    }
+
     spreadStackedTokens();
+
+    // Hop-animated tokens are kicked off after the instant placements
+    // above so their FLIP start-position measurement is accurate;
+    // each runs independently and asynchronously.
+    movesToAnimate.forEach(m => {
+        animateTokenHop(m.player, m.tokenKey, m.from, m.to, placements[`${m.player}-${m.tokenKey}`]);
+    });
 }
 
 /* =========================================================
