@@ -152,26 +152,71 @@
     box rolls for that color — but only the local player's own color
     is actually clickable (enforced in room.js).
 
-    NEW: each dice box now also carries a small "dice-timer" badge
-    (the 45s per-turn countdown clock) tucked into its corner so it
-    reads as part of the same tab rather than a separate element.
+    Each dice box also carries a small "dice-timer" badge (the 45s
+    per-turn countdown clock) tucked into its corner so it reads as
+    part of the same tab rather than a separate element.
+
+    UPDATED: dice faces are now a real CSS 3D cube (.die-scene /
+    .die-cube / 6x .die-face, each face laid out with a 3x3 pip grid)
+    instead of a flat unicode glyph. No images/textures — pure CSS
+    3D transforms + CSS Grid, driven entirely by room.js (see the
+    "3D DICE — ROTATION ENGINE" section there for the rotation math).
 -->
 <div class="board-wrap" id="board-wrap">
 
-    <div class="dice-box dice-box--red" id="dice-box-player1">
-        <img src="images/dice/1.png" alt="Red dice" id="dice-img-player1" class="dice-face" />
+    <div class="dice-box dice-box--red" id="dice-box-player1" aria-label="Red dice">
+        <div class="die-scene">
+            <div class="die-cube" id="dice-cube-player1">
+                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+            </div>
+        </div>
         <div class="dice-timer" id="dice-timer-player1">45</div>
     </div>
-    <div class="dice-box dice-box--blue" id="dice-box-player2">
-        <img src="images/dice/1.png" alt="Blue dice" id="dice-img-player2" class="dice-face" />
+
+    <div class="dice-box dice-box--blue" id="dice-box-player2" aria-label="Blue dice">
+        <div class="die-scene">
+            <div class="die-cube" id="dice-cube-player2">
+                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+            </div>
+        </div>
         <div class="dice-timer" id="dice-timer-player2">45</div>
     </div>
-    <div class="dice-box dice-box--green" id="dice-box-player3">
-        <img src="images/dice/1.png" alt="Green dice" id="dice-img-player3" class="dice-face" />
+
+    <div class="dice-box dice-box--green" id="dice-box-player3" aria-label="Green dice">
+        <div class="die-scene">
+            <div class="die-cube" id="dice-cube-player3">
+                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+            </div>
+        </div>
         <div class="dice-timer" id="dice-timer-player3">45</div>
     </div>
-    <div class="dice-box dice-box--yellow" id="dice-box-player4">
-        <img src="images/dice/1.png" alt="Yellow dice" id="dice-img-player4" class="dice-face" />
+
+    <div class="dice-box dice-box--yellow" id="dice-box-player4" aria-label="Yellow dice">
+        <div class="die-scene">
+            <div class="die-cube" id="dice-cube-player4">
+                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+            </div>
+        </div>
         <div class="dice-timer" id="dice-timer-player4">45</div>
     </div>
 

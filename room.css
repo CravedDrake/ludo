@@ -330,14 +330,11 @@ body {
   border: 3px solid var(--border);
   z-index: 15;
   cursor: default;
+  /* Not clickable by default — only re-enabled for the local player's
+     own active dice box (see .dice-box--mine.dice-active below). This
+     makes "clickable or not" an actual behavior, not just a cursor hint. */
+  pointer-events: none;
   transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
-}
-
-.dice-box .dice-face {
-  width: 68%;
-  height: 68%;
-  object-fit: contain;
-  transition: opacity 0.2s ease;
 }
 
 /* Top boxes (red / blue) stick up out of the board, flush against its top edge */
@@ -396,24 +393,19 @@ body {
 /* Only the LOCAL player's own active dice box is actually clickable */
 .dice-box--mine.dice-active {
   cursor: pointer;
+  pointer-events: auto;
 }
 
-/* Rolling animation — smooth rotation + slight bounce/scale on the face image.
-   NEW: also block clicks while a roll (local or synced from another device)
-   is in progress, so it can't be double-triggered or clicked mid-spin. */
+/* Rolling — block clicks while a roll (local or synced from another
+   device) is in progress, so it can't be double-triggered or clicked
+   mid-animation. The result is already known the instant the roll
+   starts (computed synchronously in room.js and broadcast alongside
+   the "start rolling" write) — the animation you see here is a toss
+   flourish driven straight at that known final face, not a blind
+   spin that gets corrected afterwards. See the "SYNCED DICE ROLL
+   SYSTEM" section in room.js and the diceToss keyframes below. */
 .dice-box.dice-rolling {
   pointer-events: none;
-}
-.dice-box.dice-rolling .dice-face {
-  animation: diceRollSpin 0.8s ease-in-out infinite;
-}
-
-@keyframes diceRollSpin {
-  0%   { transform: rotate(0deg)   scale(1);    }
-  25%  { transform: rotate(95deg)  scale(1.15); }
-  50%  { transform: rotate(190deg) scale(0.92); }
-  75%  { transform: rotate(285deg) scale(1.12); }
-  100% { transform: rotate(360deg) scale(1);    }
 }
 
 /* ── NEW: per-color turn-timer badge ─────────────────────────────
@@ -464,6 +456,101 @@ body {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.18); }
 }
+
+
+/* ================================================================
+   3D CSS DICE — real cube, 6 faces, CSS-Grid pips.
+   No images, no textures, no WebGL — pure CSS 3D transforms.
+
+   Rotation math (mirrors the rotation applied to .die-cube by
+   room.js): each face is PLACED with rotate(θ) · translateZ(half).
+   To bring a face to the camera, the CUBE is rotated by the INVERSE
+   of θ, not θ again — see the "3D DICE — ROTATION ENGINE" comment
+   block in room.js for the full derivation/table.
+
+   --die-size controls the cube's edge length and scales down at the
+   mobile breakpoint below, along with the dice-box's perspective.
+   ================================================================ */
+
+.dice-box {
+  --die-size: 30px;
+  perspective: 220px;
+  perspective-origin: 50% 40%;
+}
+
+.die-scene {
+  width: var(--die-size);
+  height: var(--die-size);
+  transform-style: preserve-3d;
+}
+
+/* NEW: "toss" flourish — a light bounce/settle applied to the
+   die-scene wrapper itself (a different element than .die-cube,
+   which room.js drives directly via rotateX/rotateY), so the two
+   animations layer without fighting each other. Plays exactly once,
+   timed to match room.js's ROLL_DURATION (950ms), and finishes right
+   as the cube's rotation lands on the true result — there's no
+   after-the-fact "snap to the right face" anymore, since the cube
+   was already being driven at the correct face the entire time. */
+@keyframes diceToss {
+  0%   { transform: translateY(0)    scale(1);    }
+  22%  { transform: translateY(-9px) scale(1.06); }
+  48%  { transform: translateY(3px)  scale(0.95); }
+  70%  { transform: translateY(-3px) scale(1.03); }
+  100% { transform: translateY(0)    scale(1);    }
+}
+
+.dice-box.dice-rolling .die-scene {
+  animation: diceToss 950ms cubic-bezier(.33, 1.5, .62, 1) 1;
+}
+
+.die-cube {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(0deg) rotateY(0deg);
+  will-change: transform;
+}
+
+.die-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  grid-template-areas:
+    "a b c"
+    "d e f"
+    "g h i";
+  padding: 14%;
+  background: linear-gradient(155deg, #ffffff 0%, #f4f2ee 42%, #d8d3c8 100%);
+  border-radius: 22%;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.55),
+    inset 0 -2px 4px rgba(0,0,0,0.14);
+}
+
+.die-face--1 { transform: translateZ(calc(var(--die-size) / 2)); }
+.die-face--6 { transform: rotateY(180deg) translateZ(calc(var(--die-size) / 2)); }
+.die-face--3 { transform: rotateY(90deg)  translateZ(calc(var(--die-size) / 2)); }
+.die-face--4 { transform: rotateY(-90deg) translateZ(calc(var(--die-size) / 2)); }
+.die-face--2 { transform: rotateX(90deg)  translateZ(calc(var(--die-size) / 2)); }
+.die-face--5 { transform: rotateX(-90deg) translateZ(calc(var(--die-size) / 2)); }
+
+.die-pip {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  align-self: center;
+  justify-self: center;
+  background: radial-gradient(circle at 32% 30%, #46464c, #1b1b1f 65%);
+  box-shadow: 0 0.5px 1px rgba(0,0,0,0.4);
+}
+
+.die-p-a { grid-area: a; } .die-p-b { grid-area: b; } .die-p-c { grid-area: c; }
+.die-p-d { grid-area: d; } .die-p-e { grid-area: e; } .die-p-f { grid-area: f; }
+.die-p-g { grid-area: g; } .die-p-h { grid-area: h; } .die-p-i { grid-area: i; }
 
 
 /* ================================================================
@@ -756,7 +843,7 @@ body {
 
   /* shrink the dice boxes + reserved margin on small screens */
   .board-wrap { margin: 50px auto; }
-  .dice-box { width: 46px; height: 46px; }
+  .dice-box { width: 46px; height: 46px; --die-size: 22px; perspective: 160px; }
   .dice-box--red, .dice-box--blue { top: -40px; }
   .dice-box--green, .dice-box--yellow { bottom: -40px; }
   .dice-timer { min-width: 18px; height: 18px; font-size: 0.58rem; top: -6px; right: -6px; }
@@ -771,6 +858,8 @@ body {
 /* ── 18. Reduced motion ───────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .die-cube { transition-duration: 0.01ms !important; }
+  .dice-box.dice-rolling .die-scene { animation: none !important; }
 }
 
 
@@ -1134,8 +1223,7 @@ body {
 .chat-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 .chat-input:focus { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(139,92,246,0.25); }
 
-/* animated send button — small "press + tilt" on click, per the
-   requested nice-UX list */
+/* animated send button — small "press + tilt" on click */
 .chat-send-btn {
   flex-shrink: 0;
   width: 40px; height: 40px;

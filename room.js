@@ -38,7 +38,11 @@ const isHost = sessionStorage.getItem("isHost") === "true";
    TIMING CONSTANTS
 ========================================================= */
 
-const ROLL_DURATION = 1800; // ms — how long the synced dice-spin animation runs
+const ROLL_DURATION = 950;  // ms — snappy "toss" animation duration; the cube is driven
+                             // straight at the true result from frame one (see the
+                             // "SYNCED DICE ROLL SYSTEM" section), so this no longer
+                             // needs to be long enough to hide a "wrong then corrected"
+                             // face — it's purely how long the toss flourish plays.
 const TURN_SECONDS  = 45;   // per-turn countdown shown on each color's timer badge
 const STALE_ROLL_MS = ROLL_DURATION + 4000; // safety window before any client can clear a stuck roll
 
@@ -64,11 +68,16 @@ const diceBoxes = {
     player3: document.getElementById("dice-box-player3"),
     player4: document.getElementById("dice-box-player4"),
 };
-const diceImgs = {
-    player1: document.getElementById("dice-img-player1"),
-    player2: document.getElementById("dice-img-player2"),
-    player3: document.getElementById("dice-img-player3"),
-    player4: document.getElementById("dice-img-player4"),
+
+/* Per-color 3D dice CUBES — the .die-cube element inside each dice box
+   whose `transform: rotateX(...) rotateY(...)` is what actually shows
+   a given face to the camera. See the "3D DICE — ROTATION ENGINE"
+   section below for how these are driven. */
+const diceCubes = {
+    player1: document.getElementById("dice-cube-player1"),
+    player2: document.getElementById("dice-cube-player2"),
+    player3: document.getElementById("dice-cube-player3"),
+    player4: document.getElementById("dice-cube-player4"),
 };
 
 /* NEW: per-color turn-timer badges (45s countdown) */
@@ -139,44 +148,86 @@ function playDiceSound() {
 }
 
 /* =========================================================
-   DICE IMAGE PRELOADING
-   Previously the six dice-face PNGs were only ever referenced via
-   `img.src = "images/dice/N.png"` at roll time. The very first time
-   a given face number was needed, the browser had to fetch it off
-   disk/network and decode it before it could paint — which is
-   exactly the "old face lingers for 0.5–1s" symptom, since the
-   <img> keeps showing whatever it last painted until the new bitmap
-   is ready. The random face-cycling during the animation helped
-   warm the cache for *some* faces, but not reliably all 6, and not
-   before the very first roll of a session.
+   3D DICE — ROTATION ENGINE
+   Replaces the old unicode-glyph swap (⚀–⚅) with a real CSS 3D
+   cube per color (markup: .dice-box > .die-scene > .die-cube > 6x
+   .die-face, see room.html). No images/textures — pure CSS 3D
+   transforms + a CSS-Grid pip layout on each face (room.css).
 
-   Fix: eagerly create an Image() for every face on page load and
-   let the browser fetch+decode them into cache immediately. By the
-   time any roll happens, every face is already decoded — swapping
-   `img.src` afterwards is then just a cache hit and paints on the
-   very next frame, no network/decode delay.
+   ROTATION MATH
+   Each face is PLACED (in room.css) with:
+       rotate(θ_face) · translateZ(half-cube-size)
+   To bring that face to point at the camera, the CUBE must be
+   rotated by the INVERSE of θ_face — not θ_face again, which is
+   the classic bug that lands the wrong (often mirrored) face.
+   Working through all six faces gives this self-consistent table:
+
+     face   placement rotation      cube rotation to show it
+     1 front   none                    rotateX(0)      rotateY(0)
+     2 top     rotateX(90deg)          rotateX(-90deg) rotateY(0)
+     3 right   rotateY(90deg)          rotateX(0)      rotateY(-90deg)
+     4 left    rotateY(-90deg)         rotateX(0)      rotateY(90deg)
+     5 bottom  rotateX(-90deg)         rotateX(90deg)  rotateY(0)
+     6 back    rotateY(180deg)         rotateX(0)      rotateY(180deg)
 ========================================================= */
 
-const DICE_FACE_COUNT = 6;
-const diceFacePreloaded = new Array(DICE_FACE_COUNT + 1).fill(false); // 1-indexed
+const FACE_ROTATION = {
+    1: { x: 0,   y: 0   },
+    2: { x: -90, y: 0   },
+    3: { x: 0,   y: -90 },
+    4: { x: 0,   y: 90  },
+    5: { x: 90,  y: 0   },
+    6: { x: 0,   y: 180 }
+};
 
-function diceImgSrc(face) {
-    return `images/dice/${face}.png`;
+/* Running rotation total PER COLOR — deltas are always ADDED on top
+   of this (never reset to 0-359°), so a die always visibly spins
+   forward toward its next face instead of ever snapping backward. */
+const diceRotationState = {
+    player1: { x: 0, y: 0 },
+    player2: { x: 0, y: 0 },
+    player3: { x: 0, y: 0 },
+    player4: { x: 0, y: 0 }
+};
+
+/* Tracks the last face value actually painted onto each cube, so
+   updateDiceBoxes() (which runs on every realtime Firebase update)
+   only touches the transform when the face genuinely changed. */
+let lastPaintedFace = { player1: 1, player2: 1, player3: 1, player4: 1 };
+
+/* Smallest forward delta (in degrees) that lands `current + delta`
+   on `targetMod360` (mod 360), plus any extra full spins requested. */
+function angleTo(current, targetMod360, spins) {
+    const base = ((targetMod360 - current) % 360 + 360) % 360;
+    return current + base + (spins || 0) * 360;
 }
 
-(function preloadDiceImages() {
-    for (let face = 1; face <= DICE_FACE_COUNT; face++) {
-        const img = new Image();
-        img.onload = () => { diceFacePreloaded[face] = true; };
-        img.src = diceImgSrc(face);
-        // decode() (where supported) forces the browser to fully
-        // decode the bitmap off the main thread ahead of time, not
-        // just download the bytes — belt-and-braces on top of onload.
-        if (img.decode) {
-            img.decode().catch(() => { /* ignore — onload already covers us */ });
-        }
-    }
-})();
+/* Rotates a color's cube to show `face` (1-6). `opts.spins` adds
+   extra full turns on top (used for the "rolling" flourish); `opts
+   .transition` overrides the CSS transition timing; `opts.instant`
+   applies the rotation with no transition at all (page-load state). */
+function setDiceFace(slot, face, opts) {
+    opts = opts || {};
+    const cube = diceCubes[slot];
+    if (!cube) return;
+
+    const state  = diceRotationState[slot];
+    const target = FACE_ROTATION[face] || FACE_ROTATION[1];
+
+    state.x = angleTo(state.x, ((target.x % 360) + 360) % 360, opts.spins);
+    state.y = angleTo(state.y, ((target.y % 360) + 360) % 360, opts.spins);
+
+    cube.style.transition = opts.instant
+        ? "none"
+        : (opts.transition || "transform 350ms cubic-bezier(.22,.9,.24,1)");
+    cube.style.transform = "rotateX(" + state.x + "deg) rotateY(" + state.y + "deg)";
+}
+
+/* Land every cube on face 1 at rest, with no transition, before the
+   game (and therefore any real dice values) exists. */
+Object.keys(diceCubes).forEach(slot => {
+    setDiceFace(slot, 1, { instant: true });
+});
 
 /* =========================================================
    BOARD PATH — matches the real 15x15 grid in room.html
@@ -602,51 +653,58 @@ startGameBtn?.addEventListener("click", async () => {
 });
 
 /* =========================================================
-   NEW: SYNCED DICE ROLL SYSTEM
-   Rolling is now a piece of shared state (`game/rolling`) instead
-   of a purely local animation. Whoever clicks their own dice box
-   writes `{ slot, startedAt }` to the room; EVERY connected client
-   (including the roller) reacts to that write by spinning the same
-   dice box for a full ROLL_DURATION (1.5s) local timer of their own
-   — not clock-synced against the roller's `startedAt`, since doing
-   the math that way turned out fragile (device clock drift and
-   asymmetric network latency for the start-vs-stop writes could
-   make a spectator's remaining time compute to near-zero, so their
-   animation barely played). Only the roller's own client computes
-   the actual result and writes it back, clearing `game/rolling`.
-   This is what makes the roll — and its result — show up in real
-   time on every device instead of just the roller's.
+   SYNCED DICE ROLL SYSTEM
+   Rolling is a piece of shared state (`game/rolling`) instead of a
+   purely local animation. Whoever clicks their own dice box computes
+   the result RIGHT THEN (synchronous, instant) and writes
+   `{ slot, startedAt, value }` to the room in one shot — the result
+   travels together with the "start rolling" signal instead of being
+   computed only after the animation finishes. EVERY connected client
+   (including the roller) reacts to that write by animating that
+   color's cube straight toward the known final face over a local
+   ROLL_DURATION timer of their own — not clock-synced against the
+   roller's `startedAt`, since doing the math that way is fragile
+   (device clock drift and asymmetric network latency for the
+   start-vs-stop writes could make a spectator's remaining time
+   compute to near-zero, so their animation barely played).
+
+   This removes the old two-step "spin blind, then snap to the real
+   result" lag: the cube is already being driven at the correct face
+   during the whole toss, so the moment the animation ends it's
+   already showing the right number — nothing left to "load".
 ========================================================= */
 
 let currentAnimatingSlot = null; // slot currently showing the synced roll animation locally
-let diceAnimInterval      = null; // face-cycling interval for the active animation
 let animationStopTimeout  = null; // timeout that ends the active animation
 
-function startDiceAnimation(slot) {
-    const box = diceBoxes[slot];
-    const img = diceImgs[slot];
-    if (!box || !img) return;
+function startDiceAnimation(slot, face) {
+    const box  = diceBoxes[slot];
+    const cube = diceCubes[slot];
+    if (!box || !cube) return;
 
     currentAnimatingSlot = slot;
     box.classList.add("dice-rolling");
     playDiceSound();
 
-    // Face-changing speed is unchanged — same 70-90ms cadence, just
-    // running for a longer total window now (ROLL_DURATION = 1500ms).
-    diceAnimInterval = setInterval(() => {
-        const randomFace = Math.floor(Math.random() * 6) + 1;
-        img.src = diceImgSrc(randomFace);
-    }, 70 + Math.random() * 20);
+    // Drive the cube straight at the TRUE final face — extra full spins
+    // on top are purely a visual flourish (a couple of laps so it still
+    // reads as "rolling"), never a detour to some other face. Since the
+    // destination is correct from the very first frame, there's no
+    // second corrective snap once the animation ends.
+    const state  = diceRotationState[slot];
+    const target = FACE_ROTATION[face] || FACE_ROTATION[1];
 
-    // Always run the FULL animation locally from the moment THIS
-    // device starts it, rather than trying to compute a shortened
-    // "remaining" time based on the roller's startedAt clock. Every
-    // client — roller included — now just plays a full ROLL_DURATION
-    // spin. Since the real dice value is written to Firebase
-    // separately once the roller's own animation finishes, it will
-    // typically arrive on other devices right around when their own
-    // local timer ends too (both messages travel over a similar
-    // network path), without the fragile clock-sync math.
+    const spinsX = 2 + Math.floor(Math.random() * 2); // 2–3 extra full laps
+    const spinsY = 3 + Math.floor(Math.random() * 2); // 3–4 extra full laps
+
+    state.x = angleTo(state.x, ((target.x % 360) + 360) % 360, spinsX);
+    state.y = angleTo(state.y, ((target.y % 360) + 360) % 360, spinsY);
+
+    cube.style.transition = "transform " + ROLL_DURATION + "ms cubic-bezier(.22,.61,.36,1)";
+    cube.style.transform  = "rotateX(" + state.x + "deg) rotateY(" + state.y + "deg)";
+
+    lastPaintedFace[slot] = face; // cube is already headed to the correct face
+
     animationStopTimeout = setTimeout(() => {
         finishDiceAnimation(slot);
     }, ROLL_DURATION);
@@ -655,7 +713,6 @@ function startDiceAnimation(slot) {
 function stopDiceAnimation(slot) {
     const box = diceBoxes[slot];
     if (box) box.classList.remove("dice-rolling");
-    if (diceAnimInterval)     { clearInterval(diceAnimInterval); diceAnimInterval = null; }
     if (animationStopTimeout) { clearTimeout(animationStopTimeout); animationStopTimeout = null; }
     if (currentAnimatingSlot === slot) currentAnimatingSlot = null;
 }
@@ -671,14 +728,13 @@ function finishDiceAnimation(slot) {
 
 /* Keeps every client's local animation in sync with `game.rolling`.
    Called on every realtime update, BEFORE showGameUI() in the same
-   onValue callback. When `rolling` clears, this stops the local
-   spin animation; updateDiceBoxes() (called moments later by
-   showGameUI() in that same synchronous callback) then paints the
-   real `game.diceValue` face, since currentAnimatingSlot has already
-   been reset to null here. That handoff was already gap-free timing
-   -wise — the missing piece was that the face it paints now comes
-   from the preloaded image cache instead of a cold fetch, so on
-   slower connections it no longer stalls waiting for the PNG. */
+   onValue callback. `rolling.value` (the already-computed dice
+   result) is what tells every spectator's client exactly which face
+   to animate toward. When `rolling` clears, this stops the local
+   animation; updateDiceBoxes() (called moments later by
+   showGameUI() in that same synchronous callback) then makes sure
+   the cube is resting on the real `game.diceValue` face, since
+   currentAnimatingSlot has already been reset to null here. */
 function syncDiceRollingAnimation(game) {
     const rolling = game.rolling;
 
@@ -690,21 +746,22 @@ function syncDiceRollingAnimation(game) {
     if (rolling.slot === currentAnimatingSlot) return; // already animating this exact roll
 
     if (currentAnimatingSlot) stopDiceAnimation(currentAnimatingSlot);
-    startDiceAnimation(rolling.slot);
+    startDiceAnimation(rolling.slot, rolling.value || 1);
 }
 
-/* Called ONLY by the client whose color just finished rolling.
-   Computes the real dice value, checks for a legal move, and writes
-   the final result (or an auto-skip if nothing can move).
+/* Called ONLY by the client whose color just finished its roll
+   animation. The dice value was already computed and broadcast back
+   when the roll STARTED (see handleDiceClick below), so this just
+   resolves the legal-move check and writes the final turn state —
+   nothing is computed here, and the cube is already showing the
+   right face by the time this runs.
 
-   NEW: uses the locally cached `latestRoom`/`latestGame` (kept fresh
-   by the onValue listener) instead of doing a fresh get(roomRef)
-   read here. That read-then-write pattern meant every single roll
-   paid for TWO full network round-trips back to Firebase before
-   anything visually resolved — fine on a fast/low-latency laptop
-   connection, but very noticeable extra delay on phone wifi/cellular.
-   Since the listener already has the up-to-date state, we can skip
-   straight to the write. */
+   Uses the locally cached `latestRoom`/`latestGame` (kept fresh by
+   the onValue listener) instead of doing a fresh get(roomRef) read
+   here — that read-then-write pattern meant every single roll paid
+   for TWO full network round-trips back to Firebase before anything
+   visually resolved. Since the listener already has the up-to-date
+   state, we can skip straight to the write. */
 function finalizeRoll(mySlot) {
     const room = latestRoom;
     const game = latestGame;
@@ -712,6 +769,9 @@ function finalizeRoll(mySlot) {
 
     // Safety: only finalize if this roll is still genuinely ours
     if (!game || !game.rolling || game.rolling.slot !== mySlot) return;
+
+    const dice = game.rolling.value;
+
     if (game.currentTurn !== mySlot) {
         // Not our turn anymore for some reason — just clear the stuck
         // rolling flag. Not awaited: nothing local depends on this
@@ -722,22 +782,6 @@ function finalizeRoll(mySlot) {
         return;
     }
 
-    // --- STEP 1: compute the result (pure, synchronous, instant) ---
-    const dice = Math.floor(Math.random() * 6) + 1;
-
-    // --- STEP 2: paint it locally RIGHT NOW, before touching Firebase ---
-    // Because every face was preloaded+decoded up front, this src swap
-    // is a cache hit and shows up on the very next frame — no more
-    // gap where the last mid-animation random face lingers on screen.
-    const img = diceImgs[mySlot];
-    if (img) img.src = diceImgSrc(dice);
-
-    // --- STEP 3: sync to Firebase in the background (fire-and-forget) ---
-    // Deliberately NOT awaited and finalizeRoll is no longer async:
-    // the local dice face above is already final by the time this
-    // line runs, so there is nothing left for the local UI to wait
-    // on. Other clients pick up the change the moment it lands via
-    // their own onValue listener, same as before.
     if (!hasLegalMove(dice, game.tokens[mySlot])) {
         const finishOrder = game.finishOrder || [];
         const nextTurn    = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
@@ -760,7 +804,12 @@ function finalizeRoll(mySlot) {
 
 /* Click handler shared by all 4 dice boxes. Only fires for real if
    the clicked box belongs to the LOCAL player's own color, it's
-   currently that color's turn, and no roll is already in progress. */
+   currently that color's turn, and no roll is already in progress.
+   The dice VALUE is computed right here, synchronously, before any
+   network round-trip or animation — it travels along with the
+   "start rolling" write itself, so every client (including this one)
+   already knows the true destination face the instant the animation
+   begins, instead of waiting for it to be revealed afterwards. */
 async function handleDiceClick(slot) {
     const mySlot = getMySlot();
     if (!mySlot) return;
@@ -776,9 +825,11 @@ async function handleDiceClick(slot) {
     if (game.gameOver)                        return;
     if (game.rolling && game.rolling.slot)    return; // a roll is already in flight
 
+    const dice = Math.floor(Math.random() * 6) + 1;
+
     try {
         await update(roomRef, {
-            "game/rolling": { slot: mySlot, startedAt: Date.now() }
+            "game/rolling": { slot: mySlot, startedAt: Date.now(), value: dice }
         });
     } catch (e) {
         console.error("Failed to start dice roll:", e);
@@ -1152,15 +1203,17 @@ function showGameUI(room, players) {
    Runs on every realtime update. Shows/hides + dims/glows each of
    the 4 per-color dice boxes based on whose turn it is, whether a
    seat is filled, and whether it's the local player's own color.
-   Skips overwriting the dice face while a synced roll animation is
-   actively spinning that box (syncDiceRollingAnimation owns it then).
+   Skips overwriting the cube's rotation while a synced roll
+   animation is actively driving that box (syncDiceRollingAnimation
+   owns it then), and only re-rotates a cube when the face it should
+   show has actually changed (lastPaintedFace), so idle re-renders
+   (e.g. a rolling-flag write) never restart a transition needlessly.
 ========================================================= */
 
 function updateDiceBoxes(game, players, mySlot) {
     for (const slot of ["player1", "player2", "player3", "player4"]) {
         const box = diceBoxes[slot];
-        const img = diceImgs[slot];
-        if (!box || !img) continue;
+        if (!box) continue;
 
         const playerExists = !!players[slot];
         box.classList.toggle("dice-box--empty", !playerExists);
@@ -1176,11 +1229,15 @@ function updateDiceBoxes(game, players, mySlot) {
         box.classList.toggle("dice-idle", !isThisTurn);
         box.classList.toggle("dice-box--mine", slot === mySlot);
 
-        // Don't stomp the face while a synced rolling animation owns this box
+        // Don't stomp the cube while a synced rolling animation owns this box
         if (currentAnimatingSlot === slot) continue;
 
         if (isThisTurn) {
-            img.src = game.diceValue ? diceImgSrc(game.diceValue) : diceImgSrc(1);
+            const face = game.diceValue || 1;
+            if (lastPaintedFace[slot] !== face) {
+                lastPaintedFace[slot] = face;
+                setDiceFace(slot, face, { transition: "transform 350ms cubic-bezier(.22,.9,.24,1)" });
+            }
         }
     }
 }
