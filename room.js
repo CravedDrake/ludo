@@ -55,7 +55,8 @@ const joinNameInput = document.getElementById("join-name");
 const joinBtn       = document.getElementById("join-btn");
 const startGameBtn  = document.getElementById("start-game-btn");
 const leaveRoomBtn  = document.getElementById("leave-room-btn");
-const copyRoomBtn   = document.getElementById("copy-room-btn");
+const copyLinkBtn   = document.getElementById("copy-link-btn"); // NEW — replaces the old single copy-room-btn
+const copyCodeBtn   = document.getElementById("copy-code-btn"); // NEW
 const waitingMsg    = document.getElementById("waiting-message");
 
 const gameContainer = document.getElementById("game-container");
@@ -128,12 +129,15 @@ diceSoundFallback.preload = "auto";
     }
 })();
 
-function playDiceSound() {
+async function playDiceSound() {
     if (audioCtx && diceSoundBuffer) {
         // Mobile browsers suspend the AudioContext until a user gesture;
         // resume() here (called synchronously from the click handler) satisfies that.
+        // FIXED: this is now awaited before scheduling the source — starting a
+        // BufferSource on a still-suspended context can silently drop the very
+        // first playback instead of just queuing until resume() finishes.
         if (audioCtx.state === "suspended") {
-            audioCtx.resume();
+            try { await audioCtx.resume(); } catch (e) { /* ignore — fallback below still works */ }
         }
         const source = audioCtx.createBufferSource();
         source.buffer = diceSoundBuffer;
@@ -148,23 +152,39 @@ function playDiceSound() {
 }
 
 /* =========================================================
-   NEW: TAP SOUND — one hop = one tap. Same Web Audio approach as
+   TAP SOUND — one hop = one tap. Same Web Audio approach as
    the dice sound above (decode once into a buffer, fire a fresh
    AudioBufferSourceNode per hop) so back-to-back taps fired quickly
    during a multi-step move never get cut off, stolen, or laggy —
    each hop gets its own independent, near-instant playback.
+
+   FIXED: this block previously referenced an undefined `resp`
+   variable because the `fetch("sounds/tap.mp3")` call that should
+   have produced it was commented out — every page load threw a
+   silent (caught) ReferenceError and tap sounds never played. Also
+   restored the <audio>-element fallback path, which was fully
+   commented out and therefore did nothing even when Web Audio
+   wasn't available.
+
+   FIXED (2): playTapSound() now awaits audioCtx.resume() before
+   scheduling the buffer source, same as playDiceSound() above.
+   Previously resume() was fired-and-forgotten, so a tap that landed
+   while the context was still suspended (e.g. the very first hop of
+   a multi-step move, right as the context wakes up) could be
+   scheduled before resume() actually completed and never be heard.
+   animateTokenHop() below now awaits this call for the same reason.
 ========================================================= */
 
 let tapSoundBuffer = null;
-// const tapSoundFallback = new Audio("sounds/tap.mp3");
-// tapSoundFallback.preload = "auto";
+const tapSoundFallback = new Audio("sounds/tap.mp3");
+tapSoundFallback.preload = "auto";
 
 (async function initTapAudio() {
     try {
         // Reuse the same AudioContext the dice sound already created
         // (falls back to making one here if that init failed/hasn't run yet).
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        // const resp = await fetch("sounds/tap.mp3");
+        const resp = await fetch("sounds/tap.mp3");
         const arrayBuffer = await resp.arrayBuffer();
         tapSoundBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     } catch (e) {
@@ -173,10 +193,10 @@ let tapSoundBuffer = null;
     }
 })();
 
-function playTapSound() {
+async function playTapSound() {
     if (audioCtx && tapSoundBuffer) {
         if (audioCtx.state === "suspended") {
-            audioCtx.resume();
+            try { await audioCtx.resume(); } catch (e) { /* ignore — fallback below still works */ }
         }
         const source = audioCtx.createBufferSource();
         source.buffer = tapSoundBuffer;
@@ -186,10 +206,10 @@ function playTapSound() {
         // Clone the element so 2-3 taps fired in quick succession each
         // get their own independent playback instead of one shared
         // <audio> stealing/restarting itself via currentTime = 0.
-        // const clone = tapSoundFallback.cloneNode();
-        // clone.play().catch(() => {
-        //     // Autoplay restrictions — safe to ignore, hop still plays visually
-        // });
+        const clone = tapSoundFallback.cloneNode();
+        clone.play().catch(() => {
+            // Autoplay restrictions — safe to ignore, hop still plays visually
+        });
     }
 }
 
@@ -573,26 +593,44 @@ modalLeaveBtn?.addEventListener("click", leaveRoom);
 modalContinueBtn?.addEventListener("click", hideResultModal);
 
 /* =========================================================
-   COPY ROOM CODE
+   COPY ROOM LINK / CODE
+   NEW: split into two separate, independently-flashing buttons —
+   one copies the full shareable join URL, the other copies just the
+   bare room code. Both share the same clipboard-write logic (with
+   the same execCommand fallback for browsers/contexts where the
+   modern Clipboard API isn't available), and each button flashes
+   its own "✓ Copied!" state without touching the other button.
 ========================================================= */
 
-copyRoomBtn?.addEventListener("click", async () => {
-    const base    = window.location.href.split("?")[0];
-    const roomUrl = base + "?code=" + roomCode;
-
+async function copyTextToClipboard(text) {
     try {
-        await navigator.clipboard.writeText(roomUrl);
+        await navigator.clipboard.writeText(text);
     } catch {
         const tmp = document.createElement("input");
-        tmp.value = roomUrl;
+        tmp.value = text;
         document.body.appendChild(tmp);
         tmp.select();
         document.execCommand("copy");
         document.body.removeChild(tmp);
     }
+}
 
-    copyRoomBtn.textContent = "✓ Copied!";
-    setTimeout(() => { copyRoomBtn.textContent = "Copy"; }, 2500);
+function flashCopied(btn, originalText) {
+    if (!btn) return;
+    btn.textContent = "✓ Copied!";
+    setTimeout(() => { btn.textContent = originalText; }, 2500);
+}
+
+copyLinkBtn?.addEventListener("click", async () => {
+    const base    = window.location.href.split("?")[0];
+    const roomUrl = base + "?code=" + roomCode;
+    await copyTextToClipboard(roomUrl);
+    flashCopied(copyLinkBtn, "Copy Link");
+});
+
+copyCodeBtn?.addEventListener("click", async () => {
+    await copyTextToClipboard(roomCode);
+    flashCopied(copyCodeBtn, "Copy Code");
 });
 
 /* =========================================================
@@ -848,6 +886,25 @@ function finalizeRoll(mySlot) {
     }).catch(err => console.error("Failed to sync roll result:", err));
 }
 
+/* =========================================================
+   NEW: BOARD-ANIMATION LOCK
+   Tracks how many token hop-animations are currently in flight
+   (see renderTokens()/animateTokenHop() below). While this is > 0:
+     - handleDiceClick() and handleTokenClick() both bail out, so a
+       player can't roll again or move another token until the token
+       that's currently hopping across the board has actually landed.
+     - captured tokens and the finish/game-over popup are held back
+       (see renderTokens()) so a capture doesn't "vanish" before the
+       capturing token visually arrives, and the win modal doesn't
+       pop up mid-hop.
+========================================================= */
+
+let boardAnimationCount = 0;
+
+function isBoardAnimating() {
+    return boardAnimationCount > 0;
+}
+
 /* Click handler shared by all 4 dice boxes. Only fires for real if
    the clicked box belongs to the LOCAL player's own color, it's
    currently that color's turn, and no roll is already in progress.
@@ -861,6 +918,7 @@ async function handleDiceClick(slot) {
     if (!mySlot) return;
     if (slot !== mySlot) return;
     if (!latestGame) return;
+    if (isBoardAnimating()) return; // NEW: a token is still hopping across the board — wait for it to land
 
     const game = latestGame;
     const room = latestRoom;
@@ -893,6 +951,7 @@ Object.keys(diceBoxes).forEach(slot => {
 async function handleTokenClick(player, tokenKey) {
     const mySlot = getMySlot();
     if (!mySlot) return;
+    if (isBoardAnimating()) return; // NEW: block moving another token mid-hop (e.g. during an extra turn)
 
     // NEW: use cached state instead of a fresh get(roomRef) round-trip —
     // see the comment on finalizeRoll() above for why.
@@ -1191,7 +1250,11 @@ onValue(roomRef, (snap) => {
     if (room.status === "playing" && room.game) {
         syncDiceRollingAnimation(room.game);
         showGameUI(room, players);
-        handleResultPopups(room.game, players);
+        // NOTE: result popups are no longer triggered from here directly.
+        // renderTokens() (called from showGameUI when the board actually
+        // changed) now owns when handleResultPopups() fires, so a finish/
+        // win popup never appears until any in-flight token hop has
+        // actually landed. See resolveResultPopups() below.
     }
 });
 
@@ -1254,15 +1317,22 @@ function showGameUI(room, players) {
    owns it then), and only re-rotates a cube when the face it should
    show has actually changed (lastPaintedFace), so idle re-renders
    (e.g. a rolling-flag write) never restart a transition needlessly.
+
+   NEW: also locks (pointer-events:none, via .dice-box--locked) every
+   dice box while a token hop animation is in flight, on top of the
+   existing dice-active/idle/mine gating — see isBoardAnimating().
 ========================================================= */
 
 function updateDiceBoxes(game, players, mySlot) {
+    const locked = isBoardAnimating();
+
     for (const slot of ["player1", "player2", "player3", "player4"]) {
         const box = diceBoxes[slot];
         if (!box) continue;
 
         const playerExists = !!players[slot];
         box.classList.toggle("dice-box--empty", !playerExists);
+        box.classList.toggle("dice-box--locked", locked); // NEW
 
         if (!playerExists) {
             box.classList.remove("dice-active", "dice-idle", "dice-box--mine");
@@ -1329,29 +1399,34 @@ function updateHomeLabels(players) {
 /* =========================================================
    RENDER TOKENS — placed onto the real c-ROW-COL grid cells
 
-   NEW: Token movement is now animated as a series of hops instead
-   of an instant DOM re-parent. Each realtime update is diffed
-   against the PREVIOUS `game.tokens` snapshot to detect genuine
-   forward moves. A token that advanced N cells forward hops through
-   each of those N intermediate cells one at a time — 1 step is a
-   single hop straight to the destination and stop; 2 steps hops
-   through the in-between cell, then hops to the destination and
-   stops; 3 steps hops, hops, hops, then stops — always exactly
-   matching the dice count, with the tap sound played once per hop.
+   Token movement is animated as a series of hops instead of an
+   instant DOM re-parent. Each realtime update is diffed against the
+   PREVIOUS `game.tokens` snapshot to detect genuine forward moves. A
+   token that advanced N cells forward hops through each of those N
+   intermediate cells one at a time — 1 step is a single hop straight
+   to the destination and stop; 2 steps hops through the in-between
+   cell, then hops to the destination and stops; 3 steps hops, hops,
+   hops, then stops — always exactly matching the dice count, with
+   the tap sound played once per hop.
 
-   Captures, resets, and a fresh game start (index goes DOWN, e.g.
-   captured back to -1, or 56 -> -1 on a new game) are NEVER
-   animated — those still snap instantly, since there's no sensible
-   "forward path" to hop along for them.
+   NEW: any token captured (knocked back to home) IN THE SAME UPDATE
+   as a hop-animated move is now held in place — not snapped back
+   instantly — until that hop animation finishes landing. This keeps
+   a capture from visually vanishing before the capturing token has
+   actually arrived on its cell. Once every hop from this update has
+   landed, held tokens snap to their new spot and any finish/game-over
+   popup for this update is shown (see resolveResultPopups()).
+
+   A fresh game start (all tokens reset to -1, no forward move to
+   wait on) is unaffected and still snaps instantly, same as before.
 ========================================================= */
 
 let previousTokensSnapshot = null; // last game.tokens we rendered, for diffing
 
-// Per-hop animation duration. Deliberately shorter than the ~1s tap
-// clip itself (same overlapping-sound approach already used for the
-// dice roll sound) so even a 6-step move still feels snappy, while
-// each tap still rings out naturally without getting cut off.
-const HOP_STEP_MS = 550;
+// Per-hop animation duration. Sped up from the original 550ms for a
+// snappier feel — still comfortably longer than a flicker so each
+// hop and its tap sound stay readable even on a 6-step move.
+const HOP_STEP_MS = 380;
 
 /* Same placement rules the previous renderTokens() had inline (home
    park slot / individual finish slot / track-or-home-stretch cell),
@@ -1479,17 +1554,28 @@ async function animateTokenHop(player, tokenKey, fromIndex, toIndex, finalCellId
         const cell = cellId ? document.getElementById(cellId) : null;
         if (!cell) continue;
 
-        playTapSound();
+        // FIXED: awaited so the tap sound reliably fires (see the
+        // "TAP SOUND" section above) before the hop it's paired with plays.
+        await playTapSound();
         await hopTokenToCell(el, cell, HOP_STEP_MS);
     }
 
     spreadStackedTokens(); // re-settle neatly if it landed on an occupied cell
 }
 
+/* Fires the finish/game-over popup logic for a given game snapshot.
+   Split out from renderTokens()/the realtime listener so it can be
+   called either immediately (nothing animating) or held until any
+   in-flight hop for this update has landed (see renderTokens()). */
+function resolveResultPopups(game) {
+    handleResultPopups(game, latestPlayers || {});
+}
+
 function renderTokens(game) {
     const placements      = computeTokenPlacements(game);
     const prevTokens       = previousTokensSnapshot;
     const movesToAnimate   = [];
+    const capturedKeys     = []; // tokens knocked backward in this same update
 
     if (prevTokens) {
         for (const player in game.tokens) {
@@ -1506,6 +1592,8 @@ function renderTokens(game) {
                 // since there's no forward path to hop along.
                 if (newIndex > oldIndex && (newIndex - oldIndex) <= 6) {
                     movesToAnimate.push({ player, tokenKey, from: oldIndex, to: newIndex });
+                } else if (newIndex < oldIndex) {
+                    capturedKeys.push(`${player}-${tokenKey}`);
                 }
             }
         }
@@ -1515,11 +1603,16 @@ function renderTokens(game) {
 
     const animatingIds = new Set(movesToAnimate.map(m => `${m.player}-${m.tokenKey}`));
 
-    // Everything NOT being hop-animated (captures, a fresh-game reset,
-    // or simply the very first render) is placed straight onto its
-    // final cell, exactly like the original instant version.
+    // NEW: only hold captured tokens back if something is actually
+    // hopping this cycle — a fresh "Start Game" reset (56/whatever -> -1
+    // on every token, no forward move at all) still snaps instantly.
+    const holdCaptures = movesToAnimate.length > 0;
+    const heldIds = new Set(holdCaptures ? capturedKeys : []);
+
+    // Everything NOT being hop-animated and NOT a held-back capture is
+    // placed straight onto its final cell, exactly like before.
     for (const key in placements) {
-        if (animatingIds.has(key)) continue;
+        if (animatingIds.has(key) || heldIds.has(key)) continue;
         const el     = document.getElementById(key);
         const cellId = placements[key];
         const cell   = cellId ? document.getElementById(cellId) : null;
@@ -1528,11 +1621,44 @@ function renderTokens(game) {
 
     spreadStackedTokens();
 
-    // Hop-animated tokens are kicked off after the instant placements
-    // above so their FLIP start-position measurement is accurate;
-    // each runs independently and asynchronously.
+    if (movesToAnimate.length === 0) {
+        // Nothing to wait on this cycle — resolve any finish/game-over
+        // popup immediately, same timing as before.
+        resolveResultPopups(game);
+        return;
+    }
+
+    // NEW: block dice/token clicks and hold back captures + popups
+    // until every hop kicked off by this update has landed.
+    boardAnimationCount += movesToAnimate.length;
+    updateDiceBoxes(latestGame || game, latestPlayers || {}, getMySlot());
+
     movesToAnimate.forEach(m => {
-        animateTokenHop(m.player, m.tokenKey, m.from, m.to, placements[`${m.player}-${m.tokenKey}`]);
+        const key = `${m.player}-${m.tokenKey}`;
+        animateTokenHop(m.player, m.tokenKey, m.from, m.to, placements[key]).then(() => {
+            boardAnimationCount = Math.max(0, boardAnimationCount - 1);
+            if (boardAnimationCount > 0) return; // other hops from this update still in flight
+
+            // Every hop from this update has landed — release held captures,
+            // then re-check for a finish/game-over popup and unlock inputs.
+            heldIds.forEach(hKey => {
+                const el     = document.getElementById(hKey);
+                const cellId = placements[hKey];
+                const cell   = cellId ? document.getElementById(cellId) : null;
+                if (el && cell) cell.appendChild(el);
+            });
+            spreadStackedTokens();
+
+            resolveResultPopups(game);
+
+            // Re-run the cheap clickability/dice-box passes so the
+            // unlock is reflected immediately, not on the next
+            // unrelated Firebase update.
+            if (latestGame) {
+                updateTokenClickability(latestGame, getMySlot());
+                updateDiceBoxes(latestGame, latestPlayers || {}, getMySlot());
+            }
+        });
     });
 }
 
@@ -1646,7 +1772,8 @@ function updateTokenClickability(game, mySlot) {
     const myTokenData = game.tokens[mySlot];
     if (!myTokenData) return;
 
-    const canInteract = !game.gameOver && game.currentTurn === mySlot && game.diceRolled;
+    // NEW: also require no token hop currently in flight — see isBoardAnimating().
+    const canInteract = !game.gameOver && game.currentTurn === mySlot && game.diceRolled && !isBoardAnimating();
     const dice = game.diceValue;
 
     for (const tokenKey in myTokenData) {

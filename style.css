@@ -711,3 +711,107 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── 8b. Divider (Create Game  ── OR ──  Join with code) ──────── */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-6) 0;
+}
+
+.divider__line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
+}
+
+.divider__text {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* ── 8c. Join-with-code row ───────────────────────────────────── */
+.field--join {
+  margin-bottom: 0;
+}
+
+.join-row {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.join-row__input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  text-align: center;
+}
+
+.btn-join {
+  flex-shrink: 0;
+  padding: 0 var(--sp-5);
+  background: rgba(255,255,255,0.06);
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    transform var(--ease),
+    box-shadow var(--ease);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-join:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--accent-light);
+  transform: translateY(-2px);
+}
+
+.btn-join:active {
+  transform: translateY(0);
+}
+
+.btn-join:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── 14b. Responsive — join row ───────────────────────────────── */
+@media (max-width: 460px) {
+  .divider {
+    margin: var(--sp-5) 0;
+  }
+
+  .join-row__input {
+    min-height: 48px;
+  }
+
+  .btn-join {
+    min-height: 48px;
+    padding: 0 var(--sp-4);
+  }
+}
+
+@media (max-width: 360px) {
+  .join-row {
+    flex-direction: column;
+  }
+
+  .btn-join {
+    width: 100%;
+    padding: 0.75rem;
+  }
+}
