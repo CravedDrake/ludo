@@ -16,6 +16,15 @@
   --blue:         #3B82F6;
   --green:        #22C55E;
   --yellow:       #EAB308;
+  /* RGB channels for every player color, single-sourced so any rgba()
+     tint anywhere in this file can reference rgba(var(--x-rgb), alpha)
+     instead of hardcoding the triplet over and over. This is also what
+     makes the 2-player red/yellow recolor below a one-line override
+     instead of a find-and-replace across dozens of rules. */
+  --red-rgb:      239, 68, 68;
+  --blue-rgb:     59, 130, 246;
+  --green-rgb:    34, 197, 94;
+  --yellow-rgb:   234, 179, 8;
   --danger:       #DC2626;
   --danger-light: #EF4444;
   --font-display: 'Baloo 2', cursive;
@@ -26,6 +35,26 @@
   --ease: 200ms ease;
 }
 
+/* ── 1b. Two-player mode ──────────────────────────────────────────
+   For a 2-player room, room.js adds this class to <body>. Blue is
+   NO LONGER repainted as yellow here — red (top-left) and blue
+   (top-right) now stay visually distinct in 2-player games, and the
+   diagonal corner (bottom-right, actually yellow) remains its own
+   color too. Only the unused seats are hidden. */
+body.mode-2p {
+  /* (blue → yellow recolor removed intentionally) */
+}
+/* The 2nd/3rd seats aren't used in a 2-player room — hide them
+   everywhere instead of leaving dead/empty UI on screen. */
+body.mode-2p #player2-slot,
+body.mode-2p #player3-slot,
+body.mode-2p #legend-player2,
+body.mode-2p #legend-player3,
+body.mode-2p .dice-box--blue,
+body.mode-2p .dice-box--green {
+  display: none;
+}
+
 /* ── 2. Reset ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 16px; scroll-behavior: smooth; }
@@ -34,6 +63,7 @@ html { font-size: 16px; scroll-behavior: smooth; }
 body {
   font-family: var(--font-body);
   background-color: var(--bg);
+  background-image: radial-gradient(circle at 50% -10%, #322d78 0%, var(--bg) 55%);
   color: var(--text);
   min-height: 100dvh;
   display: flex;
@@ -80,8 +110,8 @@ body {
 }
 
 .hero__title {
-  font-family: var(--font-display); font-size: 3.5rem; font-weight: 800;
-  letter-spacing: 0.14em; line-height: 1; text-shadow: 0 0 40px rgba(139,92,246,0.6);
+  font-family: var(--font-display); font-size: clamp(2.3rem, 8vw, 3.5rem); font-weight: 800;
+  letter-spacing: 0.12em; line-height: 1; text-shadow: 0 0 40px rgba(139,92,246,0.6);
 }
 .hero__subtitle {
   font-size: 0.9rem; font-weight: 500; color: var(--text-muted);
@@ -106,8 +136,8 @@ body {
 /* ── 8. Room code row ─────────────────────────────────────────── */
 .room-code-row { display: flex; align-items: center; gap: var(--sp-3); }
 .room-code {
-  flex: 1; font-family: var(--font-display); font-size: 2.25rem; font-weight: 700;
-  letter-spacing: 0.28em; color: var(--accent-light);
+  flex: 1; font-family: var(--font-display); font-size: clamp(1.6rem, 7vw, 2.25rem); font-weight: 700;
+  letter-spacing: 0.22em; color: var(--accent-light);
   background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.3);
   border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); text-align: center;
   text-shadow: 0 0 20px rgba(139,92,246,0.5);
@@ -183,10 +213,10 @@ body {
   content: ''; width: 38%; height: 38%; border-radius: 50%;
   background: rgba(255,255,255,0.35); margin-top: 14%;
 }
-.player-slot__color--red    { background: var(--red);    box-shadow: 0 0 0 3px rgba(239,68,68,0.25),   0 4px 12px rgba(239,68,68,0.35); }
-.player-slot__color--blue   { background: var(--blue);   box-shadow: 0 0 0 3px rgba(59,130,246,0.25),  0 4px 12px rgba(59,130,246,0.35); }
-.player-slot__color--green  { background: var(--green);  box-shadow: 0 0 0 3px rgba(34,197,94,0.25),   0 4px 12px rgba(34,197,94,0.35); }
-.player-slot__color--yellow { background: var(--yellow); box-shadow: 0 0 0 3px rgba(234,179,8,0.25),   0 4px 12px rgba(234,179,8,0.35); }
+.player-slot__color--red    { background: var(--red);    box-shadow: 0 0 0 3px rgba(var(--red-rgb),0.25),    0 4px 12px rgba(var(--red-rgb),0.35); }
+.player-slot__color--blue   { background: var(--blue);   box-shadow: 0 0 0 3px rgba(var(--blue-rgb),0.25),   0 4px 12px rgba(var(--blue-rgb),0.35); }
+.player-slot__color--green  { background: var(--green);  box-shadow: 0 0 0 3px rgba(var(--green-rgb),0.25),  0 4px 12px rgba(var(--green-rgb),0.35); }
+.player-slot__color--yellow { background: var(--yellow); box-shadow: 0 0 0 3px rgba(var(--yellow-rgb),0.25), 0 4px 12px rgba(var(--yellow-rgb),0.35); }
 .player-slot--empty .player-slot__color { opacity: 0.3; }
 .player-slot__info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .badge--host {
@@ -239,6 +269,7 @@ body {
   position: relative; z-index: 1;
   width: 100%; max-width: 620px; margin: 0 auto;
   padding: var(--sp-4);
+  box-sizing: border-box;
   display: none; /* shown by JS */
   flex-direction: column; align-items: center; gap: var(--sp-4);
 }
@@ -249,7 +280,7 @@ body {
 }
 
 #turn-indicator {
-  font-family: var(--font-display); font-size: 1.3rem; font-weight: 700;
+  font-family: var(--font-display); font-size: clamp(1.05rem, 4.5vw, 1.3rem); font-weight: 700;
   color: var(--accent-light); text-align: center;
   text-shadow: 0 0 20px rgba(139,92,246,0.5);
   min-height: 2rem;
@@ -326,8 +357,8 @@ body {
 
 .board-wrap {
   position: relative;
-  width: min(96vw, 560px);
-  margin: 64px auto; /* reserves room above/below for the protruding dice boxes */
+  width: min(100%, 560px);
+  margin: 64px auto 56px; /* reserves room above/below for the protruding dice boxes */
 }
 
 .dice-box {
@@ -372,10 +403,10 @@ body {
 .dice-box--yellow { right: calc(20% - 29px); }
 
 /* Color tints matching each corner's own zone color */
-.dice-box--red    { background: rgba(239, 68, 68, 0.28);  border-color: rgba(239, 68, 68, 0.65); }
-.dice-box--blue   { background: rgba( 59,130, 246, 0.28); border-color: rgba( 59,130, 246, 0.65); }
-.dice-box--green  { background: rgba( 34,197,  94, 0.28); border-color: rgba( 34,197,  94, 0.65); }
-.dice-box--yellow { background: rgba(234,179,   8, 0.28); border-color: rgba(234,179,   8, 0.65); }
+.dice-box--red    { background: rgba(var(--red-rgb), 0.28);    border-color: rgba(var(--red-rgb), 0.65); }
+.dice-box--blue   { background: rgba(var(--blue-rgb), 0.28);   border-color: rgba(var(--blue-rgb), 0.65); }
+.dice-box--green  { background: rgba(var(--green-rgb), 0.28);  border-color: rgba(var(--green-rgb), 0.65); }
+.dice-box--yellow { background: rgba(var(--yellow-rgb), 0.28); border-color: rgba(var(--yellow-rgb), 0.65); }
 
 /* Seat has no player joined — dim it out and make it inert */
 .dice-box--empty {
@@ -601,10 +632,10 @@ body {
 }
 
 /* ── Corner zone backgrounds ──────────────────────────────────── */
-.zone-red    { background: rgba(239, 68,  68,  0.18); }
-.zone-blue   { background: rgba( 59,130, 246, 0.18); }
-.zone-green  { background: rgba( 34,197,  94, 0.18); }
-.zone-yellow { background: rgba(234,179,   8, 0.18); }
+.zone-red    { background: rgba(var(--red-rgb), 0.18); }
+.zone-blue   { background: rgba(var(--blue-rgb), 0.18); }
+.zone-green  { background: rgba(var(--green-rgb), 0.18); }
+.zone-yellow { background: rgba(var(--yellow-rgb), 0.18); }
 
 /* ── Track cells ──────────────────────────────────────────────── */
 .track {
@@ -613,10 +644,10 @@ body {
 }
 
 /* Safe cells */
-.safe-red    { background: rgba(239, 68, 68, 0.22); }
-.safe-blue   { background: rgba( 59,130,246, 0.22); }
-.safe-green  { background: rgba( 34,197, 94, 0.22); }
-.safe-yellow { background: rgba(234,179,  8, 0.22); }
+.safe-red    { background: rgba(var(--red-rgb), 0.22); }
+.safe-blue   { background: rgba(var(--blue-rgb), 0.22); }
+.safe-green  { background: rgba(var(--green-rgb), 0.22); }
+.safe-yellow { background: rgba(var(--yellow-rgb), 0.22); }
 
 .safe-red::before,
 .safe-blue::before,
@@ -652,10 +683,10 @@ body {
 
 /* ── Home stretch (colored lanes leading to center) ───────────── */
 .home-stretch { border-color: rgba(255,255,255,0.12); }
-.stretch-red    { background: rgba(239, 68, 68, 0.35); }
-.stretch-blue   { background: rgba( 59,130,246, 0.35); }
-.stretch-green  { background: rgba( 34,197, 94, 0.35); }
-.stretch-yellow { background: rgba(234,179,  8, 0.35); }
+.stretch-red    { background: rgba(var(--red-rgb), 0.35); }
+.stretch-blue   { background: rgba(var(--blue-rgb), 0.35); }
+.stretch-green  { background: rgba(var(--green-rgb), 0.35); }
+.stretch-yellow { background: rgba(var(--yellow-rgb), 0.35); }
 
 /* ── Center cells ─────────────────────────────────────────────── */
 .center-mid  { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.2); }
@@ -669,17 +700,17 @@ body {
 /* Triangle accent cells */
 .center-tri { position: relative; overflow: hidden; }
 .center-tri::before { content: ''; position: absolute; inset: 0; }
-.tri-red::before    { background: linear-gradient(135deg, rgba(239,68,68,0.5) 50%, transparent 50%); }
-.tri-blue::before   { background: linear-gradient(225deg, rgba(59,130,246,0.5) 50%, transparent 50%); }
-.tri-green::before  { background: linear-gradient(315deg, rgba(34,197,94,0.5) 50%, transparent 50%); }
-.tri-yellow::before { background: linear-gradient(45deg, rgba(234,179,8,0.5) 50%, transparent 50%); }
+.tri-red::before    { background: linear-gradient(135deg, rgba(var(--red-rgb),0.5) 50%, transparent 50%); }
+.tri-blue::before   { background: linear-gradient(225deg, rgba(var(--blue-rgb),0.5) 50%, transparent 50%); }
+.tri-green::before  { background: linear-gradient(315deg, rgba(var(--green-rgb),0.5) 50%, transparent 50%); }
+.tri-yellow::before { background: linear-gradient(45deg, rgba(var(--yellow-rgb),0.5) 50%, transparent 50%); }
 
 /* Inner zone cells */
 .home-inner { border-color: rgba(255,255,255,0.04); }
-.red-inner    { background: rgba(239, 68, 68, 0.12); }
-.blue-inner   { background: rgba( 59,130,246, 0.12); }
-.green-inner  { background: rgba( 34,197, 94, 0.12); }
-.yellow-inner { background: rgba(234,179,  8, 0.12); }
+.red-inner    { background: rgba(var(--red-rgb), 0.12); }
+.blue-inner   { background: rgba(var(--blue-rgb), 0.12); }
+.green-inner  { background: rgba(var(--green-rgb), 0.12); }
+.yellow-inner { background: rgba(var(--yellow-rgb), 0.12); }
 
 /* ── Home squares (previously circles) ────────────────────────── */
 /* NEW: changed from a circle (border-radius:50%) to a rounded
@@ -699,36 +730,36 @@ body {
   left: calc(100% / 15 * 1);
   width:  calc(100% / 15 * 4);
   height: calc(100% / 15 * 4);
-  background: rgba(239, 68, 68, 0.25);
-  border: 2px solid rgba(239, 68, 68, 0.5);
-  box-shadow: 0 0 20px rgba(239,68,68,0.2);
+  background: rgba(var(--red-rgb), 0.25);
+  border: 2px solid rgba(var(--red-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--red-rgb), 0.2);
 }
 .hc-blue {
   top:  calc(100% / 15 * 1);
   left: calc(100% / 15 * 10);
   width:  calc(100% / 15 * 4);
   height: calc(100% / 15 * 4);
-  background: rgba(59,130,246, 0.25);
-  border: 2px solid rgba(59,130,246, 0.5);
-  box-shadow: 0 0 20px rgba(59,130,246,0.2);
+  background: rgba(var(--blue-rgb), 0.25);
+  border: 2px solid rgba(var(--blue-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--blue-rgb), 0.2);
 }
 .hc-green {
   top:  calc(100% / 15 * 10);
   left: calc(100% / 15 * 1);
   width:  calc(100% / 15 * 4);
   height: calc(100% / 15 * 4);
-  background: rgba(34,197,94, 0.25);
-  border: 2px solid rgba(34,197,94, 0.5);
-  box-shadow: 0 0 20px rgba(34,197,94,0.2);
+  background: rgba(var(--green-rgb), 0.25);
+  border: 2px solid rgba(var(--green-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--green-rgb), 0.2);
 }
 .hc-yellow {
   top:  calc(100% / 15 * 10);
   left: calc(100% / 15 * 10);
   width:  calc(100% / 15 * 4);
   height: calc(100% / 15 * 4);
-  background: rgba(234,179,8, 0.25);
-  border: 2px solid rgba(234,179,8, 0.5);
-  box-shadow: 0 0 20px rgba(234,179,8,0.2);
+  background: rgba(var(--yellow-rgb), 0.25);
+  border: 2px solid rgba(var(--yellow-rgb), 0.5);
+  box-shadow: 0 0 20px rgba(var(--yellow-rgb), 0.2);
 }
 
 /* NEW: subtle marker on the outer-ring cells that act as individual
@@ -772,7 +803,7 @@ body {
   left: 0;
   width:  calc(100% / 15 * 6);
   height: calc(100% / 15 * 1);
-  background: rgba(239, 68, 68, 0.55);
+  background: rgba(var(--red-rgb), 0.55);
   border-bottom-right-radius: 8px;
 }
 .label-blue {
@@ -780,7 +811,7 @@ body {
   left: calc(100% / 15 * 9);
   width:  calc(100% / 15 * 6);
   height: calc(100% / 15 * 1);
-  background: rgba(59,130,246, 0.55);
+  background: rgba(var(--blue-rgb), 0.55);
   border-bottom-left-radius: 8px;
 }
 .label-green {
@@ -788,7 +819,7 @@ body {
   left: 0;
   width:  calc(100% / 15 * 6);
   height: calc(100% / 15 * 1);
-  background: rgba(34,197,94, 0.55);
+  background: rgba(var(--green-rgb), 0.55);
   border-top-right-radius: 8px;
 }
 .label-yellow {
@@ -796,7 +827,7 @@ body {
   left: calc(100% / 15 * 9);
   width:  calc(100% / 15 * 6);
   height: calc(100% / 15 * 1);
-  background: rgba(234,179,8, 0.55);
+  background: rgba(var(--yellow-rgb), 0.55);
   border-top-left-radius: 8px;
 }
 
@@ -818,10 +849,10 @@ body {
   width: 30%; height: 30%; border-radius: 50%; background: rgba(255,255,255,0.4);
 }
 
-.token.red    { background: var(--red);    box-shadow: 0 2px 8px rgba(239,68,68,0.5); }
-.token.blue   { background: var(--blue);   box-shadow: 0 2px 8px rgba(59,130,246,0.5); }
-.token.green  { background: var(--green);  box-shadow: 0 2px 8px rgba(34,197,94,0.5); }
-.token.yellow { background: var(--yellow); box-shadow: 0 2px 8px rgba(234,179,8,0.5); }
+.token.red    { background: var(--red);    box-shadow: 0 2px 8px rgba(var(--red-rgb),0.5); }
+.token.blue   { background: var(--blue);   box-shadow: 0 2px 8px rgba(var(--blue-rgb),0.5); }
+.token.green  { background: var(--green);  box-shadow: 0 2px 8px rgba(var(--green-rgb),0.5); }
+.token.yellow { background: var(--yellow); box-shadow: 0 2px 8px rgba(var(--yellow-rgb),0.5); }
 
 .token.clickable {
   cursor: pointer;
@@ -841,15 +872,13 @@ body {
 @media (max-width: 600px) {
   body { align-items: flex-start; padding: var(--sp-4); }
   .page { gap: var(--sp-4); }
-  .hero__title { font-size: 3rem; }
 }
 @media (max-width: 460px) {
   body { padding: var(--sp-4) var(--sp-3); }
   .page { gap: var(--sp-3); }
-  .hero__title { font-size: 2.75rem; }
   .card { padding: var(--sp-5) var(--sp-4); border-radius: var(--r-md); }
   .room-code-row { flex-direction: column; align-items: stretch; }
-  .room-code { font-size: 2rem; letter-spacing: 0.2em; }
+  .room-code { letter-spacing: 0.14em; }
   .copy-btn-group { flex-direction: column; gap: var(--sp-2); }
   .btn-copy { justify-content: center; height: 48px; width: 100%; }
   .action-row { grid-template-columns: 1fr; }
@@ -860,17 +889,17 @@ body {
   .home-name-label { font-size: 7px; }
 
   /* shrink the dice boxes + reserved margin on small screens */
-  .board-wrap { margin: 50px auto; }
+  #game-container { padding: var(--sp-2); }
+  .board-wrap { margin: 46px auto 40px; }
   .dice-box { width: 46px; height: 46px; --die-size: 22px; perspective: 160px; }
-  .dice-box--red, .dice-box--blue { top: -40px; }
-  .dice-box--green, .dice-box--yellow { bottom: -40px; }
+  .dice-box--red, .dice-box--blue { top: -38px; }
+  .dice-box--green, .dice-box--yellow { bottom: -38px; }
   .dice-timer { min-width: 18px; height: 18px; font-size: 0.58rem; top: -6px; right: -6px; }
 }
 @media (max-width: 360px) {
   body { padding: var(--sp-3) var(--sp-2); }
-  .hero__title { font-size: 2.4rem; letter-spacing: 0.1em; }
   .card { padding: var(--sp-4) var(--sp-3); }
-  .room-code { font-size: 1.7rem; letter-spacing: 0.15em; }
+  .room-code { letter-spacing: 0.1em; }
 }
 
 /* ── 18. Reduced motion ───────────────────────────────────────── */

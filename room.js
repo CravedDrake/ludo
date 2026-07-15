@@ -422,7 +422,18 @@ function getCellEl(coord) {
     return document.getElementById(`c-${coord[0]}-${coord[1]}`);
 }
 
-function getNextPlayerSlot(players = {}) {
+/* NEW: `maxPlayers` determines which seats are handed out.
+   - Default (4, or unset): fills player2, then player3, then player4.
+   - 2-player rooms: skip straight to player4 — the second seat is
+     the corner DIAGONALLY OPPOSITE player1's red corner (top-left),
+     i.e. the yellow bottom-right corner, instead of the adjacent
+     blue top-right corner. player2/player3 are never assigned in
+     this mode, so their seats/UI simply stay empty/hidden. */
+function getNextPlayerSlot(players = {}, maxPlayers = 4) {
+    if (maxPlayers === 2) {
+        if (!players.player4) return "player4";
+        return null;
+    }
     if (!players.player2) return "player2";
     if (!players.player3) return "player3";
     if (!players.player4) return "player4";
@@ -666,7 +677,9 @@ async function joinRoom() {
             return;
         }
 
-        const slot = getNextPlayerSlot(room.players);
+        // NEW: pass room.maxPlayers so 2-player rooms hand out the
+        // diagonal (player4/yellow) seat instead of the adjacent one.
+        const slot = getNextPlayerSlot(room.players, room.maxPlayers);
 
         if (!slot) {
             alert("Room is full.");
@@ -1029,7 +1042,13 @@ async function performMove(player, tokenKey, room) {
             : finishOrder;
     }
 
-    const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0;
+    // NEW: a token that just completed its full journey home (this
+    // move landed it exactly on index 56) earns a bonus extra turn,
+    // same family as rolling a 6 or landing a capture — UNLESS this
+    // was also that player's very last token (allHome), in which
+    // case there's nothing left for them to play and turn must pass.
+    const tokenJustFinished = index === 56;
+    const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0 || tokenJustFinished;
 
     let nextTurn;
     if (gameOver) {
@@ -1059,10 +1078,17 @@ async function performMove(player, tokenKey, room) {
 
     await update(roomRef, moveUpdates);
 
+    // NEW: let everyone's chat know a bonus move was earned by finishing
+    // a token (but only when the player still has other tokens to play).
+    if (!gameOver && tokenJustFinished && !allHome) {
+        const name = room.players[player]?.name || colorLabel(player);
+        pushSystemMessage(`🎁 ${name}'s token made it home — bonus move!`);
+    }
+
     // NEW: announce the winner to everyone's chat once the game ends
     if (gameOver && finalOrder && finalOrder.length) {
         const winnerSlot = finalOrder[0];
-        const winnerName = room.players[winnerSlot]?.name || PLAYER_LABELS[winnerSlot];
+        const winnerName = room.players[winnerSlot]?.name || colorLabel(winnerSlot);
         pushSystemMessage(`🏆 ${winnerName} wins!`);
     }
 }
@@ -1081,6 +1107,25 @@ async function performMove(player, tokenKey, room) {
 let latestRoom   = null;
 let latestGame   = null;
 let latestPlayers = null;
+
+/* NEW: TWO-PLAYER MODE
+   A room created for exactly 2 players (room.maxPlayers === 2) plays
+   Red vs Yellow — player1 (red, top-left) and player4 (yellow,
+   bottom-right), which are diagonally opposite corners on the board.
+   This reads better strategically than two adjacent corners, and it
+   avoids ever putting two players right next to each other.
+
+   Unlike before, this is NOT done by repainting player2's blue
+   corner as yellow — player2 (and player3) are simply never handed
+   out as a seat in this mode (see getNextPlayerSlot above), and
+   room.css hides their now-unused UI. So there is exactly one true
+   yellow corner (player4's) at all times, in every mode. `mode2p`
+   here just drives that hide-unused-seats CSS class. */
+let mode2p = false;
+
+function colorLabel(slot) {
+    return PLAYER_LABELS[slot];
+}
 
 let timeoutHandledForTurn = null; // the turnStartedAt value we've already auto-acted on
 
@@ -1208,6 +1253,14 @@ onValue(roomRef, (snap) => {
     latestGame    = room.game || null;
     latestPlayers = players;
 
+    // NEW: keep the two-player mode flag in sync with the room's
+    // configured capacity, and reflect it on <body> so room.css's
+    // `body.mode-2p` override can hide the unused player2/player3
+    // seats everywhere at once. No color repainting happens here
+    // anymore — player4 keeps its own real yellow.
+    mode2p = room.maxPlayers === 2;
+    document.body.classList.toggle("mode-2p", mode2p);
+
     updatePlayerSlots(players);
 
     if (mySlot) {
@@ -1279,7 +1332,7 @@ function showGameUI(room, players) {
     if (game.gameOver) {
         turnIndicator.textContent = "🏁 Game Over!";
     } else {
-        turnIndicator.textContent = `${PLAYER_LABELS[game.currentTurn]}'s turn${isMeTurn ? " (You!)" : ""}`;
+        turnIndicator.textContent = `${colorLabel(game.currentTurn)}'s turn${isMeTurn ? " (You!)" : ""}`;
     }
 
     updateDiceBoxes(game, players, mySlot);
@@ -1371,7 +1424,7 @@ function updatePlayerLegend(players, currentTurn, winner) {
 
         const p = players[slot];
 
-        nameEl.textContent = p ? p.name : `${PLAYER_LABELS[slot]} (empty)`;
+        nameEl.textContent = p ? p.name : `${colorLabel(slot)} (empty)`;
         itemEl.classList.toggle("legend-item--empty", !p);
         itemEl.classList.toggle("legend-item--turn", !!p && slot === currentTurn && !winner);
         itemEl.classList.toggle("legend-item--winner", !!p && slot === winner);
@@ -1405,7 +1458,7 @@ function updateHomeLabels(players) {
    token that advanced N cells forward hops through each of those N
    intermediate cells one at a time — 1 step is a single hop straight
    to the destination and stop; 2 steps hops through the in-between
-   cell, then hops to the destination and stops; 3 steps hops, hops,
+   cell, then hops to the destination and stop; 3 steps hops, hops,
    hops, then stops — always exactly matching the dice count, with
    the tap sound played once per hop.
 
@@ -2088,7 +2141,7 @@ async function sendMessage() {
     if (now - lastMessageSentAt < CHAT_RATE_LIMIT_MS) return;
     lastMessageSentAt = now;
 
-    const playerName = sessionStorage.getItem("playerName") || PLAYER_LABELS[mySlot];
+    const playerName = sessionStorage.getItem("playerName") || colorLabel(mySlot);
 
     chatInput.value = "";
     updateChatCharCounter();
