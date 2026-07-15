@@ -112,11 +112,21 @@ body {
   border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); text-align: center;
   text-shadow: 0 0 20px rgba(139,92,246,0.5);
 }
+.copy-btn-group {
+  display: flex;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.copy-btn-group .btn-copy {
+  flex: 1;
+}
+
 .btn-copy {
-  flex-shrink: 0; padding: 0 var(--sp-4); height: 52px;
+  padding: 0 var(--sp-4); height: 52px;
   background: rgba(255,255,255,0.06); border: 1px solid var(--border-light);
   border-radius: var(--r-md); color: var(--text); font-family: var(--font-body);
   font-size: 0.875rem; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
   transition: background var(--ease), border-color var(--ease), transform var(--ease);
 }
 .btn-copy:hover { background: rgba(139,92,246,0.15); border-color: var(--accent-light); transform: translateY(-1px); }
@@ -406,6 +416,13 @@ body {
    SYSTEM" section in room.js and the diceToss keyframes below. */
 .dice-box.dice-rolling {
   pointer-events: none;
+}
+
+/* NEW: a token is still hopping across the board from the previous
+   move — block every dice box (even the active/mine one) until it
+   lands. See isBoardAnimating()/boardAnimationCount in room.js. */
+.dice-box--locked {
+  pointer-events: none !important;
 }
 
 /* ── NEW: per-color turn-timer badge ─────────────────────────────
@@ -833,6 +850,7 @@ body {
   .card { padding: var(--sp-5) var(--sp-4); border-radius: var(--r-md); }
   .room-code-row { flex-direction: column; align-items: stretch; }
   .room-code { font-size: 2rem; letter-spacing: 0.2em; }
+  .copy-btn-group { flex-direction: column; gap: var(--sp-2); }
   .btn-copy { justify-content: center; height: 48px; width: 100%; }
   .action-row { grid-template-columns: 1fr; }
   .btn-leave, .btn-start { width: 100%; text-align: center; }

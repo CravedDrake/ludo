@@ -8,7 +8,7 @@
   <!--
     ╔══════════════════════════════════════════════════════╗
     ║  Ludo Multiplayer — Home Page                        ║
-    ║  Step 1: UI only, no Firebase yet                    ║
+    ║  Step 1: UI + Create/Join (Firebase-backed)          ║
     ╚══════════════════════════════════════════════════════╝
   -->
 
@@ -52,7 +52,7 @@
     <!-- ╚═══════════════════════════════╝ -->
     <section class="card" role="region" aria-label="Game setup">
 
-      <!-- ── Name input ── -->
+      <!-- ── Name input (shared by Create + Join) ── -->
       <div class="field">
         <label class="field__label" for="player-name">Your name</label>
         <input
@@ -132,6 +132,35 @@
         Create Game
       </button>
 
+      <!-- ── Divider ── -->
+      <div class="divider" role="separator">
+        <span class="divider__line"></span>
+        <span class="divider__text">OR</span>
+        <span class="divider__line"></span>
+      </div>
+
+      <!-- ── Join with code ── -->
+      <div class="field field--join">
+        <label class="field__label" for="join-code">Join with a code</label>
+        <div class="join-row">
+          <input
+            id="join-code"
+            class="field__input join-row__input"
+            type="text"
+            placeholder="e.g. AB12CD"
+            maxlength="6"
+            autocomplete="off"
+            spellcheck="false"
+            autocapitalize="characters"
+            inputmode="text"
+          />
+          <button class="btn-join" id="join-btn" type="button">
+            Join
+          </button>
+        </div>
+        <span class="field__error" id="join-error" role="alert"></span>
+      </div>
+
     </section>
 
     <!-- ╔═══════════════════════════════╗ -->
@@ -165,21 +194,12 @@
 
       <p class="room-panel__hint" id="copy-hint"></p>
 
-      <!--
-        Step 3 will add a "Go to Room" button here that navigates
-        to room.html?code=XXXXXX after creating the room in Firebase.
-      -->
     </section>
 
     <p class="footer-note">No login needed · Just share the link · Play</p>
 
   </main>
 
-
-  <!-- ╔══════════════════════════════════════════════════════╗ -->
-  <!-- ║  JAVASCRIPT — Home Page Logic (Step 1)               ║ -->
-  <!-- ║  Firebase will be added in Step 2.                   ║ -->
-  <!-- ╚══════════════════════════════════════════════════════╝ -->
     <script type="module" src="script.js"></script>
 </body>
 </html>
