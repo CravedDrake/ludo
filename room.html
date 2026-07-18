@@ -13,6 +13,7 @@
 />
 
 <link rel="stylesheet" href="room.css" />
+<base target="_blank">
 </head>
 
 <body>
@@ -611,6 +612,19 @@
 </div>
 
 <script type="module" src="room.js"></script>
+
+<!-- ╔════════ CONFIRM LEAVE MODAL ════════╗ -->
+<div class="modal-overlay" id="confirm-leave-modal" style="display:none;">
+    <div class="modal-card modal-card--compact">
+        <div class="modal-icon">⚠️</div>
+        <h2 class="modal-title">Leave Room?</h2>
+        <p class="modal-desc">Are you sure you want to leave? You will lose your seat in this game.</p>
+        <div class="modal-btn-row">
+            <button class="btn-modal-leave" id="confirm-leave-yes-btn" type="button">Yes, Leave</button>
+            <button class="btn-modal-continue" id="confirm-leave-no-btn" type="button">Stay</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
