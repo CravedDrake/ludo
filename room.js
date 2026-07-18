@@ -120,6 +120,11 @@ const modalLeaveBtn     = document.getElementById("modal-leave-btn");
    Leave Game button. */
 const leaveGameBtnBottom = document.getElementById("leave-game-btn-bottom");
 
+/* Confirm-leave modal elements */
+const confirmLeaveModal = document.getElementById("confirm-leave-modal");
+const confirmLeaveYesBtn = document.getElementById("confirm-leave-yes-btn");
+const confirmLeaveNoBtn  = document.getElementById("confirm-leave-no-btn");
+
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
 
@@ -196,6 +201,76 @@ tapSoundFallback.preload = "auto";
         tapSoundBuffer = null;
     }
 })();
+
+/* =========================================================
+   CAPTURE (KILL) SOUND — sharp impact when a token is captured
+========================================================= */
+
+let captureSoundBuffer = null;
+const captureSoundFallback = new Audio("sounds/capture.mp3");
+captureSoundFallback.preload = "auto";
+
+(async function initCaptureAudio() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const resp = await fetch("sounds/capture.mp3");
+        const arrayBuffer = await resp.arrayBuffer();
+        captureSoundBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.warn("Web Audio capture-sound init failed, will use fallback <audio>:", e);
+        captureSoundBuffer = null;
+    }
+})();
+
+async function playCaptureSound() {
+    if (audioCtx && captureSoundBuffer) {
+        if (audioCtx.state === "suspended") {
+            try { await audioCtx.resume(); } catch (e) { /* ignore */ }
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = captureSoundBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+    } else {
+        captureSoundFallback.currentTime = 0;
+        captureSoundFallback.play().catch(() => {});
+    }
+}
+
+/* =========================================================
+   HOME (FINISH) SOUND — triumphant chime when token reaches home
+========================================================= */
+
+let homeSoundBuffer = null;
+const homeSoundFallback = new Audio("sounds/home.mp3");
+homeSoundFallback.preload = "auto";
+
+(async function initHomeAudio() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const resp = await fetch("sounds/home.mp3");
+        const arrayBuffer = await resp.arrayBuffer();
+        homeSoundBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    } catch (e) {
+        console.warn("Web Audio home-sound init failed, will use fallback <audio>:", e);
+        homeSoundBuffer = null;
+    }
+})();
+
+async function playHomeSound() {
+    if (audioCtx && homeSoundBuffer) {
+        if (audioCtx.state === "suspended") {
+            try { await audioCtx.resume(); } catch (e) { /* ignore */ }
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = homeSoundBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+    } else {
+        homeSoundFallback.currentTime = 0;
+        homeSoundFallback.play().catch(() => {});
+    }
+}
 
 async function playTapSound() {
     if (audioCtx && tapSoundBuffer) {
@@ -584,7 +659,27 @@ function handleResultPopups(game, players) {
    Game button, and the popup button)
 ========================================================= */
 
-async function leaveRoom() {
+/* =========================================================
+   CONFIRM LEAVE MODAL
+========================================================= */
+
+function showConfirmLeaveModal() {
+    if (!confirmLeaveModal) {
+        // Fallback: if modal markup is missing, leave immediately
+        executeLeaveRoom();
+        return;
+    }
+    confirmLeaveModal.style.display = "flex";
+}
+
+function hideConfirmLeaveModal() {
+    if (confirmLeaveModal) confirmLeaveModal.style.display = "none";
+}
+
+/* The actual leave action — called ONLY after user confirms */
+async function executeLeaveRoom() {
+    hideConfirmLeaveModal();
+
     const mySlot = getMySlot();
     const myName = sessionStorage.getItem("playerName");
 
@@ -603,9 +698,18 @@ async function leaveRoom() {
     window.location.href = "index.html";
 }
 
+/* Public-facing leave handler — shows confirmation first */
+function leaveRoom() {
+    showConfirmLeaveModal();
+}
+
 leaveRoomBtn?.addEventListener("click", leaveRoom);
 leaveGameBtnBottom?.addEventListener("click", leaveRoom);  // Leave Game button below the board
 modalLeaveBtn?.addEventListener("click", leaveRoom);
+
+confirmLeaveYesBtn?.addEventListener("click", executeLeaveRoom);
+confirmLeaveNoBtn?.addEventListener("click", hideConfirmLeaveModal);
+
 modalContinueBtn?.addEventListener("click", hideResultModal);
 
 /* =========================================================
@@ -936,6 +1040,7 @@ async function performMove(player, tokenKey, room) {
     if (index > 56) return; // safety guard
 
     const captureUpdates = {};
+    let capturedSlots = []; // track which opponents were captured for animation/sound
 
     /* Only cells on the shared track (0-50) are capturable */
     if (index >= 0 && index <= 50) {
@@ -951,10 +1056,19 @@ async function performMove(player, tokenKey, room) {
                     const theirCoord = getAbsoluteCoord(p, theirIndex);
                     if (theirCoord[0] === row && theirCoord[1] === col) {
                         captureUpdates[`game/tokens/${p}/${t}/index`] = -1;
+                        capturedSlots.push({ player: p, tokenKey: t });
                     }
                 }
             }
         }
+    }
+
+    // Trigger capture sound + animation locally if any tokens were captured
+    if (capturedSlots.length > 0) {
+        playCaptureSound();
+        capturedSlots.forEach(({ player: p, tokenKey: t }) => {
+            triggerCaptureAnimation(p, t);
+        });
     }
 
     const myTokens = { ...game.tokens[player], [tokenKey]: { index } };
@@ -985,6 +1099,13 @@ async function performMove(player, tokenKey, room) {
     // that player's very last token (allHome), in which case there's
     // nothing left for them to play and turn must pass.
     const tokenJustFinished = index === 56;
+
+    // Play home sound + animation when a token reaches the finish
+    if (tokenJustFinished) {
+        playHomeSound();
+        triggerHomeAnimation(player, tokenKey);
+    }
+
     const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0 || tokenJustFinished;
 
     let nextTurn;
@@ -1437,6 +1558,69 @@ function updateHomeLabels(players) {
 }
 
 /* =========================================================
+   TOKEN ANIMATIONS — CAPTURE & HOME
+========================================================= */
+
+/* Triggered when a token is captured (sent back to home).
+   Plays a flash + shake + scale-down effect on the captured token. */
+function triggerCaptureAnimation(player, tokenKey) {
+    const el = document.getElementById(`${player}-${tokenKey}`);
+    if (!el) return;
+
+    el.classList.add("token-captured");
+
+    // Remove the class after animation completes so it can be re-triggered
+    setTimeout(() => {
+        el.classList.remove("token-captured");
+    }, 700);
+}
+
+/* Triggered when a token reaches home (index 56).
+   Plays a golden glow + bounce + particle burst effect. */
+function triggerHomeAnimation(player, tokenKey) {
+    const el = document.getElementById(`${player}-${tokenKey}`);
+    if (!el) return;
+
+    el.classList.add("token-home");
+
+    // Spawn particle burst around the token
+    spawnHomeParticles(el);
+
+    setTimeout(() => {
+        el.classList.remove("token-home");
+    }, 900);
+}
+
+/* Create small golden particles that burst outward from the token */
+function spawnHomeParticles(tokenEl) {
+    const rect = tokenEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const count = 8;
+
+    for (let i = 0; i < count; i++) {
+        const particle = document.createElement("div");
+        particle.className = "home-particle";
+        document.body.appendChild(particle);
+
+        const angle = (Math.PI * 2 * i) / count;
+        const distance = 30 + Math.random() * 25;
+        const tx = Math.cos(angle) * distance;
+        const ty = Math.sin(angle) * distance;
+
+        particle.style.left = centerX + "px";
+        particle.style.top  = centerY + "px";
+        particle.style.setProperty("--tx", tx + "px");
+        particle.style.setProperty("--ty", ty + "px");
+
+        // Clean up after animation
+        setTimeout(() => {
+            particle.remove();
+        }, 700);
+    }
+}
+
+/* =========================================================
    RENDER TOKENS
 ========================================================= */
 
@@ -1578,6 +1762,8 @@ function renderTokens(game) {
                     movesToAnimate.push({ player, tokenKey, from: oldIndex, to: newIndex });
                 } else if (newIndex < oldIndex) {
                     capturedKeys.push(`${player}-${tokenKey}`);
+                    // Trigger capture animation for tokens sent back home
+                    triggerCaptureAnimation(player, tokenKey);
                 }
             }
         }
@@ -1848,7 +2034,9 @@ function addMessage(data, id) {
     if (data.sender === "system") {
         bubble = document.createElement("div");
         bubble.className = "chat-system-msg";
-        bubble.textContent = data.message;
+        // Extract emoji prefix if present for nicer styling
+        const msg = data.message || "";
+        bubble.textContent = msg;
     } else {
         const isMine = data.sender === mySlot;
 
@@ -1910,8 +2098,10 @@ function updateChatUnreadBadge() {
     if (chatUnreadCount > 0) {
         chatUnreadBadge.textContent = chatUnreadCount > 9 ? "9+" : String(chatUnreadCount);
         chatUnreadBadge.style.display = "flex";
+        chatToggleBtn?.classList.add("has-unread");
     } else {
         chatUnreadBadge.style.display = "none";
+        chatToggleBtn?.classList.remove("has-unread");
     }
 }
 
