@@ -159,11 +159,11 @@
     per-turn countdown clock) tucked into its corner so it reads as
     part of the same tab rather than a separate element.
 
-    UPDATED: dice faces are now a real CSS 3D cube (.die-scene /
-    .die-cube / 6x .die-face, each face laid out with a 3x3 pip grid)
-    instead of a flat unicode glyph. No images/textures — pure CSS
-    3D transforms + CSS Grid, driven entirely by room.js (see the
-    "3D DICE — ROTATION ENGINE" section there for the rotation math).
+    Dice faces are a real CSS 3D cube (.die-scene / .die-cube / 6x
+    .die-face, each face laid out with a 3x3 pip grid) instead of a
+    flat unicode glyph. No images/textures — pure CSS 3D transforms
+    + CSS Grid, driven entirely by room.js (see the "3D DICE —
+    ROTATION ENGINE" section there for the rotation math).
 -->
 <div class="board-wrap" id="board-wrap">
 
@@ -554,6 +554,11 @@
 
 </div><!-- #board-wrap -->
 
+<!-- Leave Game button below the board -->
+<div class="board-actions">
+    <button class="btn-leave btn-leave--ingame" id="leave-game-btn-bottom" type="button">Leave Game</button>
+</div>
+
 </div><!-- #game-container -->
 
 <!-- ╔════════ RESULT / RANKING POPUP ════════╗
@@ -569,7 +574,7 @@
     </div>
 </div>
 
-<!-- ╔════════ NEW: LIVE ROOM CHAT ════════╗
+<!-- ╔════════ LIVE ROOM CHAT ════════╗
      Real-time chat scoped to this room's code (rooms/ROOM_CODE/chat).
      Visible from the moment the page loads — readable in the waiting
      room, not just once the game starts. Sending a message requires

@@ -16,11 +16,6 @@
   --blue:         #3B82F6;
   --green:        #22C55E;
   --yellow:       #EAB308;
-  /* RGB channels for every player color, single-sourced so any rgba()
-     tint anywhere in this file can reference rgba(var(--x-rgb), alpha)
-     instead of hardcoding the triplet over and over. This is also what
-     makes the 2-player red/yellow recolor below a one-line override
-     instead of a find-and-replace across dozens of rules. */
   --red-rgb:      239, 68, 68;
   --blue-rgb:     59, 130, 246;
   --green-rgb:    34, 197, 94;
@@ -35,17 +30,15 @@
   --ease: 200ms ease;
 }
 
-/* ── 1b. Two-player mode ──────────────────────────────────────────
-   For a 2-player room, room.js adds this class to <body>. Blue is
-   NO LONGER repainted as yellow here — red (top-left) and blue
-   (top-right) now stay visually distinct in 2-player games, and the
-   diagonal corner (bottom-right, actually yellow) remains its own
-   color too. Only the unused seats are hidden. */
-body.mode-2p {
-  /* (blue → yellow recolor removed intentionally) */
-}
-/* The 2nd/3rd seats aren't used in a 2-player room — hide them
-   everywhere instead of leaving dead/empty UI on screen. */
+/* ── 1b. Two-player mode ──────────────────────────────────────── */
+/* FIXED: this block previously also remapped --blue / --blue-rgb to
+   the yellow values. That made the (unused, hidden-from-UI) blue
+   corner on the BOARD itself repaint as yellow, so the board showed
+   two yellow corners instead of one red + one yellow (diagonally
+   opposite). The board's blue corner should simply stay its natural
+   blue — it's just unoccupied in 2-player mode, same as green. Only
+   the blue/green PLAYER UI (seat, dice box, legend chip) needs to be
+   hidden, which the rules below already do. */
 body.mode-2p #player2-slot,
 body.mode-2p #player3-slot,
 body.mode-2p #legend-player2,
@@ -343,16 +336,33 @@ body {
   box-shadow: 0 0 16px rgba(234,179,8,0.4);
 }
 
+/* In-game "Leave Game" button (header) — same visual language as
+   .btn-leave (waiting-room sidebar button) but compact and inline
+   in the game header, since there's no sidebar visible once
+   #game-container takes over the screen. */
+.btn-leave--ingame {
+  width: auto;
+  min-height: 40px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* NEW: wrapper for the Leave Game button placed below the board.
+   Reuses .btn-leave--ingame for identical styling to the header
+   version — this is purely a layout/positioning wrapper. */
+.board-actions {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-3);
+}
+
 
 /* ================================================================
    BOARD WRAP + PER-COLOR DICE BOXES
-   Replaces the single central "Roll Dice" button. Each dice box
-   is an absolutely-positioned tab that visually reads as an
-   extension of the board, sitting right above/below that color's
-   own home corner (red/blue = top corners → boxes stick up;
-   green/yellow = bottom corners → boxes stick down). Red & green
-   are the left-hand corners, so their boxes sit on the left; blue
-   & yellow are the right-hand corners, so theirs sit on the right.
    ================================================================ */
 
 .board-wrap {
@@ -371,14 +381,10 @@ body {
   border: 3px solid var(--border);
   z-index: 15;
   cursor: default;
-  /* Not clickable by default — only re-enabled for the local player's
-     own active dice box (see .dice-box--mine.dice-active below). This
-     makes "clickable or not" an actual behavior, not just a cursor hint. */
   pointer-events: none;
   transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
-/* Top boxes (red / blue) stick up out of the board, flush against its top edge */
 .dice-box--red,
 .dice-box--blue {
   top: -52px;
@@ -386,7 +392,6 @@ body {
   border-radius: var(--r-md) var(--r-md) 0 0;
 }
 
-/* Bottom boxes (green / yellow) stick down out of the board, flush against its bottom edge */
 .dice-box--green,
 .dice-box--yellow {
   bottom: -52px;
@@ -394,32 +399,25 @@ body {
   border-radius: 0 0 var(--r-md) var(--r-md);
 }
 
-/* Horizontal placement: centered over each color's own 6-column
-   corner block (which spans 40% of the board width), so 20% / 80%
-   of the board width is the center of the left / right corners. */
 .dice-box--red    { left:  calc(20% - 29px); }
 .dice-box--green   { left:  calc(20% - 29px); }
 .dice-box--blue   { right: calc(20% - 29px); }
 .dice-box--yellow { right: calc(20% - 29px); }
 
-/* Color tints matching each corner's own zone color */
 .dice-box--red    { background: rgba(var(--red-rgb), 0.28);    border-color: rgba(var(--red-rgb), 0.65); }
 .dice-box--blue   { background: rgba(var(--blue-rgb), 0.28);   border-color: rgba(var(--blue-rgb), 0.65); }
 .dice-box--green  { background: rgba(var(--green-rgb), 0.28);  border-color: rgba(var(--green-rgb), 0.65); }
 .dice-box--yellow { background: rgba(var(--yellow-rgb), 0.28); border-color: rgba(var(--yellow-rgb), 0.65); }
 
-/* Seat has no player joined — dim it out and make it inert */
 .dice-box--empty {
   opacity: 0.16;
   filter: grayscale(1);
 }
 
-/* Not this color's turn right now — dimmed but still visible */
 .dice-box.dice-idle {
   opacity: 0.45;
 }
 
-/* This color's turn right now — glowing + gently pulsing */
 .dice-box.dice-active {
   opacity: 1;
   box-shadow: 0 0 0 3px rgba(255,255,255,0.25), 0 0 20px rgba(139,92,246,0.55);
@@ -431,37 +429,20 @@ body {
   50%      { transform: scale(1.07); }
 }
 
-/* Only the LOCAL player's own active dice box is actually clickable */
 .dice-box--mine.dice-active {
   cursor: pointer;
   pointer-events: auto;
 }
 
-/* Rolling — block clicks while a roll (local or synced from another
-   device) is in progress, so it can't be double-triggered or clicked
-   mid-animation. The result is already known the instant the roll
-   starts (computed synchronously in room.js and broadcast alongside
-   the "start rolling" write) — the animation you see here is a toss
-   flourish driven straight at that known final face, not a blind
-   spin that gets corrected afterwards. See the "SYNCED DICE ROLL
-   SYSTEM" section in room.js and the diceToss keyframes below. */
 .dice-box.dice-rolling {
   pointer-events: none;
 }
 
-/* NEW: a token is still hopping across the board from the previous
-   move — block every dice box (even the active/mine one) until it
-   lands. See isBoardAnimating()/boardAnimationCount in room.js. */
 .dice-box--locked {
   pointer-events: none !important;
 }
 
-/* ── NEW: per-color turn-timer badge ─────────────────────────────
-   Small clock chip tucked into the corner of each dice box, showing
-   the 45s countdown for whoever's turn it currently is. Styled to
-   blend into the dice box rather than stand out as its own widget —
-   dark glass chip by default, only turning red/pulsing as a gentle
-   urgency cue once time is running low. */
+/* ── Per-color turn-timer badge ──────────────────────────────── */
 .dice-timer {
   position: absolute;
   top: -7px;
@@ -487,13 +468,11 @@ body {
   transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
-/* Shown only for whichever color's turn is currently active */
 .dice-timer--active {
   opacity: 1;
   transform: scale(1);
 }
 
-/* Gentle low-time warning — last 10 seconds of the turn */
 .dice-timer--warning {
   background: rgba(220,38,38,0.92);
   border-color: rgba(255,255,255,0.5);
@@ -507,17 +486,7 @@ body {
 
 
 /* ================================================================
-   3D CSS DICE — real cube, 6 faces, CSS-Grid pips.
-   No images, no textures, no WebGL — pure CSS 3D transforms.
-
-   Rotation math (mirrors the rotation applied to .die-cube by
-   room.js): each face is PLACED with rotate(θ) · translateZ(half).
-   To bring a face to the camera, the CUBE is rotated by the INVERSE
-   of θ, not θ again — see the "3D DICE — ROTATION ENGINE" comment
-   block in room.js for the full derivation/table.
-
-   --die-size controls the cube's edge length and scales down at the
-   mobile breakpoint below, along with the dice-box's perspective.
+   3D CSS DICE
    ================================================================ */
 
 .dice-box {
@@ -532,14 +501,6 @@ body {
   transform-style: preserve-3d;
 }
 
-/* NEW: "toss" flourish — a light bounce/settle applied to the
-   die-scene wrapper itself (a different element than .die-cube,
-   which room.js drives directly via rotateX/rotateY), so the two
-   animations layer without fighting each other. Plays exactly once,
-   timed to match room.js's ROLL_DURATION (950ms), and finishes right
-   as the cube's rotation lands on the true result — there's no
-   after-the-fact "snap to the right face" anymore, since the cube
-   was already being driven at the correct face the entire time. */
 @keyframes diceToss {
   0%   { transform: translateY(0)    scale(1);    }
   22%  { transform: translateY(-9px) scale(1.06); }
@@ -603,12 +564,10 @@ body {
 
 /* ================================================================
    LUDO BOARD — 15×15 CSS grid
-   CRITICAL: position:relative so tokens (position:absolute) are
-   contained inside the board element.
    ================================================================ */
 
 #ludo-board {
-  position: relative;           /* ← tokens are absolute inside this */
+  position: relative;
   display: grid;
   grid-template-columns: repeat(15, 1fr);
   grid-template-rows:    repeat(15, 1fr);
@@ -621,29 +580,24 @@ body {
   box-shadow: 0 0 60px rgba(124,58,237,0.35), 0 20px 60px rgba(0,0,0,0.6);
 }
 
-/* ── Generic board cell ───────────────────────────────────────── */
 .b-cell {
   display: flex; align-items: center; justify-content: center;
   flex-wrap: wrap; gap: 1px;
   border: 1px solid rgba(255,255,255,0.07);
   position: relative;
   transition: background 0.15s;
-  /* No overflow:hidden so tokens can peek */
 }
 
-/* ── Corner zone backgrounds ──────────────────────────────────── */
 .zone-red    { background: rgba(var(--red-rgb), 0.18); }
 .zone-blue   { background: rgba(var(--blue-rgb), 0.18); }
 .zone-green  { background: rgba(var(--green-rgb), 0.18); }
 .zone-yellow { background: rgba(var(--yellow-rgb), 0.18); }
 
-/* ── Track cells ──────────────────────────────────────────────── */
 .track {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.1);
 }
 
-/* Safe cells */
 .safe-red    { background: rgba(var(--red-rgb), 0.22); }
 .safe-blue   { background: rgba(var(--blue-rgb), 0.22); }
 .safe-green  { background: rgba(var(--green-rgb), 0.22); }
@@ -665,9 +619,6 @@ body {
 .safe-green::before  { color: var(--green); }
 .safe-yellow::before { color: var(--yellow); }
 
-/* Colorless safe cells — the shared merge-point squares just before
-   each color's home stretch. Safe for anyone, so no color tint;
-   plain white/grey star instead. */
 .safe-neutral {
   background: rgba(255,255,255,0.14);
 }
@@ -681,14 +632,12 @@ body {
   color: var(--text);
 }
 
-/* ── Home stretch (colored lanes leading to center) ───────────── */
 .home-stretch { border-color: rgba(255,255,255,0.12); }
 .stretch-red    { background: rgba(var(--red-rgb), 0.35); }
 .stretch-blue   { background: rgba(var(--blue-rgb), 0.35); }
 .stretch-green  { background: rgba(var(--green-rgb), 0.35); }
 .stretch-yellow { background: rgba(var(--yellow-rgb), 0.35); }
 
-/* ── Center cells ─────────────────────────────────────────────── */
 .center-mid  { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.2); }
 .center-home {
   background: rgba(139,92,246,0.25);
@@ -697,7 +646,6 @@ body {
 }
 .center-home::after { content: '🏁'; position: absolute; }
 
-/* Triangle accent cells */
 .center-tri { position: relative; overflow: hidden; }
 .center-tri::before { content: ''; position: absolute; inset: 0; }
 .tri-red::before    { background: linear-gradient(135deg, rgba(var(--red-rgb),0.5) 50%, transparent 50%); }
@@ -705,24 +653,17 @@ body {
 .tri-green::before  { background: linear-gradient(315deg, rgba(var(--green-rgb),0.5) 50%, transparent 50%); }
 .tri-yellow::before { background: linear-gradient(45deg, rgba(var(--yellow-rgb),0.5) 50%, transparent 50%); }
 
-/* Inner zone cells */
 .home-inner { border-color: rgba(255,255,255,0.04); }
 .red-inner    { background: rgba(var(--red-rgb), 0.12); }
 .blue-inner   { background: rgba(var(--blue-rgb), 0.12); }
 .green-inner  { background: rgba(var(--green-rgb), 0.12); }
 .yellow-inner { background: rgba(var(--yellow-rgb), 0.12); }
 
-/* ── Home squares (previously circles) ────────────────────────── */
-/* NEW: changed from a circle (border-radius:50%) to a rounded
-   square, per request. This is now purely a decorative background
-   behind the "parked" tokens — FINISHED tokens no longer pile up
-   in here (that was the cause of the "circle disappearing" look);
-   they're routed to individual finish-slot cells instead (below). */
 .home-circle {
   position: absolute;
   border-radius: var(--r-md);
   z-index: 2;
-  pointer-events: none; /* tokens on top handle clicks */
+  pointer-events: none;
 }
 
 .hc-red {
@@ -762,9 +703,6 @@ body {
   box-shadow: 0 0 20px rgba(var(--yellow-rgb), 0.2);
 }
 
-/* NEW: subtle marker on the outer-ring cells that act as individual
-   finish slots (added via JS, see FINISH_SLOT_CELLS in room.js), so
-   it's visible even before any token has finished there. */
 .finish-slot::after {
   content: '🏁';
   position: absolute;
@@ -774,12 +712,6 @@ body {
   z-index: 1;
 }
 
-/* ── Player name labels ───────────────────────────────────────── */
-/* Small color-tinted banners sitting on the outer edge of each
-   corner zone (row/col 0 or 14) — outside the home circle and
-   parked tokens, so they never get covered. Filled in by
-   updateHomeLabels() in room.js with the name of whoever is
-   playing that color, right beside that color's own zone. */
 .home-name-label {
   position: absolute;
   z-index: 5;
@@ -840,7 +772,7 @@ body {
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
   transition: transform 0.25s ease, box-shadow 0.25s ease, top 0.3s ease, left 0.3s ease;
   cursor: default;
-  position: absolute;   /* positioned by JS relative to #ludo-board */
+  position: absolute;
   z-index: 20;
 }
 
@@ -888,7 +820,6 @@ body {
   .legend-item { font-size: 0.78rem; padding: 5px 10px; }
   .home-name-label { font-size: 7px; }
 
-  /* shrink the dice boxes + reserved margin on small screens */
   #game-container { padding: var(--sp-2); }
   .board-wrap { margin: 46px auto 40px; }
   .dice-box { width: 46px; height: 46px; --die-size: 22px; perspective: 160px; }
@@ -912,19 +843,13 @@ body {
 
 /* ================================================================
    RESULT / RANKING POPUP
-   Shown when a player finishes all 4 tokens. If other players are
-   still in the game, it's a dismissible "X Won / finished Nth"
-   toast with a Continue button. Once only one player is left
-   unfinished, they're auto-placed last and this becomes the final
-   modal (simple "Won" for 2-player games, full numbered/colored
-   ranking for 3–4 player games) with only a Leave Game button.
    ================================================================ */
 
 .modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
-  display: none; /* toggled to flex by JS */
+  display: none;
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
@@ -1063,13 +988,9 @@ body {
 
 
 /* ================================================================
-   NEW: LIVE CHAT SYSTEM
-   Floating toggle button (bottom-right, game-style) + slide-in
-   panel with message bubbles. Entirely self-contained — nothing
-   above this section was modified to add it.
+   LIVE CHAT SYSTEM
    ================================================================ */
 
-/* ── Floating toggle button ──────────────────────────────────── */
 .chat-toggle-btn {
   position: fixed;
   bottom: 24px;
@@ -1106,14 +1027,13 @@ body {
   font-family: var(--font-body);
   font-size: 0.7rem;
   font-weight: 700;
-  display: none; /* toggled to flex by JS whenever there's unread activity */
+  display: none;
   align-items: center;
   justify-content: center;
   border: 2px solid var(--bg);
   box-shadow: 0 2px 8px rgba(220,38,38,0.5);
 }
 
-/* ── Chat panel ───────────────────────────────────────────────── */
 .chat-panel {
   position: fixed;
   bottom: 96px;
@@ -1171,11 +1091,10 @@ body {
 }
 .chat-close-btn:hover { background: rgba(220,38,38,0.35); transform: rotate(90deg); }
 
-/* ── Message list ─────────────────────────────────────────────── */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
   padding: var(--sp-4);
   display: flex;
   flex-direction: column;
@@ -1197,7 +1116,7 @@ body {
   font-size: 0.85rem;
   line-height: 1.4;
   word-wrap: break-word;
-  overflow-wrap: anywhere; /* long unbroken strings never overflow the bubble */
+  overflow-wrap: anywhere;
 }
 .chat-bubble--mine {
   background: var(--accent);
@@ -1214,7 +1133,7 @@ body {
   font-weight: 700;
   margin-bottom: 2px;
 }
-.chat-bubble__text { white-space: pre-wrap; } /* preserves Shift+Enter line breaks */
+.chat-bubble__text { white-space: pre-wrap; }
 .chat-bubble__time {
   font-size: 0.65rem;
   opacity: 0.65;
@@ -1223,27 +1142,12 @@ body {
 }
 .chat-bubble--theirs .chat-bubble__time { text-align: left; }
 
-/* System messages — join/leave/game start/win — centered pill,
-   visually distinct from a player bubble */
-.chat-system-msg {
-  align-self: center;
-  max-width: 90%;
-  padding: 4px 12px;
-  border-radius: var(--r-full);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--border-light);
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  text-align: center;
-}
-
 .chat-fade-in { animation: chatFadeIn 0.25s ease; }
 @keyframes chatFadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Input row ────────────────────────────────────────────────── */
 .chat-input-row {
   display: flex;
   align-items: flex-end;
@@ -1270,7 +1174,6 @@ body {
 .chat-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 .chat-input:focus { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(139,92,246,0.25); }
 
-/* animated send button — small "press + tilt" on click */
 .chat-send-btn {
   flex-shrink: 0;
   width: 40px; height: 40px;
@@ -1295,7 +1198,6 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Chat: responsive ─────────────────────────────────────────── */
 @media (max-width: 600px) {
   .chat-panel {
     right: 12px;
@@ -1317,9 +1219,8 @@ body {
   .chat-toggle-btn { width: 52px; height: 52px; font-size: 1.4rem; bottom: 14px; right: 14px; }
   .chat-bubble { max-width: 85%; font-size: 0.8rem; }
   .chat-panel__title { font-size: 0.9rem; }
-  .chat-input { font-size: 16px; } /* prevents iOS Safari auto-zoom on focus */
+  .chat-input { font-size: 16px; }
 }
-/* Taller bottom-sheet feel on short mobile viewports (keyboard-safe) */
 @media (max-width: 460px) and (max-height: 700px) {
   .chat-panel { height: 65vh; }
 }

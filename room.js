@@ -46,6 +46,20 @@ const ROLL_DURATION = 950;  // ms — snappy "toss" animation duration; the cube
 const TURN_SECONDS  = 45;   // per-turn countdown shown on each color's timer badge
 const STALE_ROLL_MS = ROLL_DURATION + 4000; // safety window before any client can clear a stuck roll
 
+// NEW: how long to wait, PAST the 45s deadline, before a client that is
+// NOT the active player steps in and forces the timeout logic on the
+// active player's behalf. This exists because previously ONLY the
+// active player's own browser tab ever called handleTurnTimeout() — if
+// that tab was closed, backgrounded, or just frozen, the 45s deadline
+// simply never fired for anyone, and the game stalled forever. The
+// grace window avoids two clients racing to act in the very first
+// instant the timer hits zero (normal network/clock jitter).
+const TIMEOUT_FALLBACK_GRACE_MS = 5000;
+
+// NEW: number of consecutive turns a player can let expire WITHOUT ever
+// rolling before they're automatically removed from the room.
+const MAX_MISSED_TURNS = 2;
+
 /* =========================================================
    UI ELEMENTS
 ========================================================= */
@@ -55,8 +69,8 @@ const joinNameInput = document.getElementById("join-name");
 const joinBtn       = document.getElementById("join-btn");
 const startGameBtn  = document.getElementById("start-game-btn");
 const leaveRoomBtn  = document.getElementById("leave-room-btn");
-const copyLinkBtn   = document.getElementById("copy-link-btn"); // NEW — replaces the old single copy-room-btn
-const copyCodeBtn   = document.getElementById("copy-code-btn"); // NEW
+const copyLinkBtn   = document.getElementById("copy-link-btn");
+const copyCodeBtn   = document.getElementById("copy-code-btn");
 const waitingMsg    = document.getElementById("waiting-message");
 
 const gameContainer = document.getElementById("game-container");
@@ -81,7 +95,7 @@ const diceCubes = {
     player4: document.getElementById("dice-cube-player4"),
 };
 
-/* NEW: per-color turn-timer badges (45s countdown) */
+/* Per-color turn-timer badges (45s countdown) */
 const diceTimers = {
     player1: document.getElementById("dice-timer-player1"),
     player2: document.getElementById("dice-timer-player2"),
@@ -96,6 +110,15 @@ const modalTitleEl      = document.getElementById("modal-title");
 const modalRankingEl    = document.getElementById("modal-ranking");
 const modalContinueBtn  = document.getElementById("modal-continue-btn");
 const modalLeaveBtn     = document.getElementById("modal-leave-btn");
+
+/* Leave Game button below the board. FIXED: this used to also look
+   up a #leave-game-btn (a header button) that doesn't exist anywhere
+   in room.html — that was dead code left over from before the button
+   was moved below the board. Only the bottom button actually exists,
+   so only that one is wired up here. It shares the same leaveRoom()
+   handler as the waiting-room sidebar button and the result-popup's
+   Leave Game button. */
+const leaveGameBtnBottom = document.getElementById("leave-game-btn-bottom");
 
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
@@ -133,9 +156,6 @@ async function playDiceSound() {
     if (audioCtx && diceSoundBuffer) {
         // Mobile browsers suspend the AudioContext until a user gesture;
         // resume() here (called synchronously from the click handler) satisfies that.
-        // FIXED: this is now awaited before scheduling the source — starting a
-        // BufferSource on a still-suspended context can silently drop the very
-        // first playback instead of just queuing until resume() finishes.
         if (audioCtx.state === "suspended") {
             try { await audioCtx.resume(); } catch (e) { /* ignore — fallback below still works */ }
         }
@@ -157,22 +177,6 @@ async function playDiceSound() {
    AudioBufferSourceNode per hop) so back-to-back taps fired quickly
    during a multi-step move never get cut off, stolen, or laggy —
    each hop gets its own independent, near-instant playback.
-
-   FIXED: this block previously referenced an undefined `resp`
-   variable because the `fetch("sounds/tap.mp3")` call that should
-   have produced it was commented out — every page load threw a
-   silent (caught) ReferenceError and tap sounds never played. Also
-   restored the <audio>-element fallback path, which was fully
-   commented out and therefore did nothing even when Web Audio
-   wasn't available.
-
-   FIXED (2): playTapSound() now awaits audioCtx.resume() before
-   scheduling the buffer source, same as playDiceSound() above.
-   Previously resume() was fired-and-forgotten, so a tap that landed
-   while the context was still suspended (e.g. the very first hop of
-   a multi-step move, right as the context wakes up) could be
-   scheduled before resume() actually completed and never be heard.
-   animateTokenHop() below now awaits this call for the same reason.
 ========================================================= */
 
 let tapSoundBuffer = null;
@@ -422,7 +426,7 @@ function getCellEl(coord) {
     return document.getElementById(`c-${coord[0]}-${coord[1]}`);
 }
 
-/* NEW: `maxPlayers` determines which seats are handed out.
+/* `maxPlayers` determines which seats are handed out.
    - Default (4, or unset): fills player2, then player3, then player4.
    - 2-player rooms: skip straight to player4 — the second seat is
      the corner DIAGONALLY OPPOSITE player1's red corner (top-left),
@@ -576,12 +580,13 @@ function handleResultPopups(game, players) {
 }
 
 /* =========================================================
-   LEAVE ROOM (shared by the sidebar button and the popup button)
+   LEAVE ROOM (shared by the sidebar button, the in-game Leave
+   Game button, and the popup button)
 ========================================================= */
 
 async function leaveRoom() {
     const mySlot = getMySlot();
-    const myName = sessionStorage.getItem("playerName"); // NEW — used for the chat announcement below
+    const myName = sessionStorage.getItem("playerName");
 
     if (mySlot) {
         try {
@@ -589,28 +594,22 @@ async function leaveRoom() {
         } catch (e) {
             console.warn("Could not remove player from room:", e);
         }
-        // NEW: let everyone else's chat know this player left
         if (myName) pushSystemMessage(`🔴 ${myName} left the room`);
     }
 
-    destroyChat(); // NEW: detach the chat listener before navigating away — prevents memory leaks
+    destroyChat(); // detach the chat listener before navigating away — prevents memory leaks
 
     sessionStorage.clear();
     window.location.href = "index.html";
 }
 
 leaveRoomBtn?.addEventListener("click", leaveRoom);
+leaveGameBtnBottom?.addEventListener("click", leaveRoom);  // Leave Game button below the board
 modalLeaveBtn?.addEventListener("click", leaveRoom);
 modalContinueBtn?.addEventListener("click", hideResultModal);
 
 /* =========================================================
    COPY ROOM LINK / CODE
-   NEW: split into two separate, independently-flashing buttons —
-   one copies the full shareable join URL, the other copies just the
-   bare room code. Both share the same clipboard-write logic (with
-   the same execCommand fallback for browsers/contexts where the
-   modern Clipboard API isn't available), and each button flashes
-   its own "✓ Copied!" state without touching the other button.
 ========================================================= */
 
 async function copyTextToClipboard(text) {
@@ -677,8 +676,6 @@ async function joinRoom() {
             return;
         }
 
-        // NEW: pass room.maxPlayers so 2-player rooms hand out the
-        // diagonal (player4/yellow) seat instead of the adjacent one.
         const slot = getNextPlayerSlot(room.players, room.maxPlayers);
 
         if (!slot) {
@@ -701,7 +698,6 @@ async function joinRoom() {
 
         joinCard.style.display = "none";
 
-        // NEW: announce this player joining to everyone's chat
         pushSystemMessage(`🟢 ${name} joined the room`);
 
     } catch (err) {
@@ -739,36 +735,20 @@ startGameBtn?.addEventListener("click", async () => {
         "game/finishOrder":    [],
         "game/gameOver":       false,
         "game/finalOrder":     null,
+        // NEW: per-player count of consecutive turns expired with no roll —
+        // reset fresh at the start of every game. See MAX_MISSED_TURNS.
+        "game/missedTurns":    { player1: 0, player2: 0, player3: 0, player4: 0 },
         "game/tokens/player1": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player2": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player3": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } },
         "game/tokens/player4": { t1: { index: -1 }, t2: { index: -1 }, t3: { index: -1 }, t4: { index: -1 } }
     });
 
-    // NEW: announce game start to everyone's chat
     pushSystemMessage("🎲 Game started!");
 });
 
 /* =========================================================
    SYNCED DICE ROLL SYSTEM
-   Rolling is a piece of shared state (`game/rolling`) instead of a
-   purely local animation. Whoever clicks their own dice box computes
-   the result RIGHT THEN (synchronous, instant) and writes
-   `{ slot, startedAt, value }` to the room in one shot — the result
-   travels together with the "start rolling" signal instead of being
-   computed only after the animation finishes. EVERY connected client
-   (including the roller) reacts to that write by animating that
-   color's cube straight toward the known final face over a local
-   ROLL_DURATION timer of their own — not clock-synced against the
-   roller's `startedAt`, since doing the math that way is fragile
-   (device clock drift and asymmetric network latency for the
-   start-vs-stop writes could make a spectator's remaining time
-   compute to near-zero, so their animation barely played).
-
-   This removes the old two-step "spin blind, then snap to the real
-   result" lag: the cube is already being driven at the correct face
-   during the whole toss, so the moment the animation ends it's
-   already showing the right number — nothing left to "load".
 ========================================================= */
 
 let currentAnimatingSlot = null; // slot currently showing the synced roll animation locally
@@ -783,11 +763,6 @@ function startDiceAnimation(slot, face) {
     box.classList.add("dice-rolling");
     playDiceSound();
 
-    // Drive the cube straight at the TRUE final face — extra full spins
-    // on top are purely a visual flourish (a couple of laps so it still
-    // reads as "rolling"), never a detour to some other face. Since the
-    // destination is correct from the very first frame, there's no
-    // second corrective snap once the animation ends.
     const state  = diceRotationState[slot];
     const target = FACE_ROTATION[face] || FACE_ROTATION[1];
 
@@ -823,15 +798,6 @@ function finishDiceAnimation(slot) {
     }
 }
 
-/* Keeps every client's local animation in sync with `game.rolling`.
-   Called on every realtime update, BEFORE showGameUI() in the same
-   onValue callback. `rolling.value` (the already-computed dice
-   result) is what tells every spectator's client exactly which face
-   to animate toward. When `rolling` clears, this stops the local
-   animation; updateDiceBoxes() (called moments later by
-   showGameUI() in that same synchronous callback) then makes sure
-   the cube is resting on the real `game.diceValue` face, since
-   currentAnimatingSlot has already been reset to null here. */
 function syncDiceRollingAnimation(game) {
     const rolling = game.rolling;
 
@@ -846,33 +812,16 @@ function syncDiceRollingAnimation(game) {
     startDiceAnimation(rolling.slot, rolling.value || 1);
 }
 
-/* Called ONLY by the client whose color just finished its roll
-   animation. The dice value was already computed and broadcast back
-   when the roll STARTED (see handleDiceClick below), so this just
-   resolves the legal-move check and writes the final turn state —
-   nothing is computed here, and the cube is already showing the
-   right face by the time this runs.
-
-   Uses the locally cached `latestRoom`/`latestGame` (kept fresh by
-   the onValue listener) instead of doing a fresh get(roomRef) read
-   here — that read-then-write pattern meant every single roll paid
-   for TWO full network round-trips back to Firebase before anything
-   visually resolved. Since the listener already has the up-to-date
-   state, we can skip straight to the write. */
 function finalizeRoll(mySlot) {
     const room = latestRoom;
     const game = latestGame;
     const turnOrder = (room && room.turnOrder) || ["player1", "player2", "player3", "player4"];
 
-    // Safety: only finalize if this roll is still genuinely ours
     if (!game || !game.rolling || game.rolling.slot !== mySlot) return;
 
     const dice = game.rolling.value;
 
     if (game.currentTurn !== mySlot) {
-        // Not our turn anymore for some reason — just clear the stuck
-        // rolling flag. Not awaited: nothing local depends on this
-        // write completing, so don't hold up the caller for it.
         update(roomRef, { "game/rolling": null }).catch(err =>
             console.error("Failed to clear stale rolling flag:", err)
         );
@@ -900,16 +849,7 @@ function finalizeRoll(mySlot) {
 }
 
 /* =========================================================
-   NEW: BOARD-ANIMATION LOCK
-   Tracks how many token hop-animations are currently in flight
-   (see renderTokens()/animateTokenHop() below). While this is > 0:
-     - handleDiceClick() and handleTokenClick() both bail out, so a
-       player can't roll again or move another token until the token
-       that's currently hopping across the board has actually landed.
-     - captured tokens and the finish/game-over popup are held back
-       (see renderTokens()) so a capture doesn't "vanish" before the
-       capturing token visually arrives, and the win modal doesn't
-       pop up mid-hop.
+   BOARD-ANIMATION LOCK
 ========================================================= */
 
 let boardAnimationCount = 0;
@@ -920,18 +860,13 @@ function isBoardAnimating() {
 
 /* Click handler shared by all 4 dice boxes. Only fires for real if
    the clicked box belongs to the LOCAL player's own color, it's
-   currently that color's turn, and no roll is already in progress.
-   The dice VALUE is computed right here, synchronously, before any
-   network round-trip or animation — it travels along with the
-   "start rolling" write itself, so every client (including this one)
-   already knows the true destination face the instant the animation
-   begins, instead of waiting for it to be revealed afterwards. */
+   currently that color's turn, and no roll is already in progress. */
 async function handleDiceClick(slot) {
     const mySlot = getMySlot();
     if (!mySlot) return;
     if (slot !== mySlot) return;
     if (!latestGame) return;
-    if (isBoardAnimating()) return; // NEW: a token is still hopping across the board — wait for it to land
+    if (isBoardAnimating()) return; // a token is still hopping across the board — wait for it to land
 
     const game = latestGame;
     const room = latestRoom;
@@ -946,7 +881,11 @@ async function handleDiceClick(slot) {
 
     try {
         await update(roomRef, {
-            "game/rolling": { slot: mySlot, startedAt: Date.now(), value: dice }
+            "game/rolling": { slot: mySlot, startedAt: Date.now(), value: dice },
+            // NEW: actually rolling proves this player showed up for their
+            // turn — reset their consecutive-missed-turn counter so a run
+            // of active turns can never accumulate toward an auto-kick.
+            [`game/missedTurns/${mySlot}`]: 0
         });
     } catch (e) {
         console.error("Failed to start dice roll:", e);
@@ -964,10 +903,8 @@ Object.keys(diceBoxes).forEach(slot => {
 async function handleTokenClick(player, tokenKey) {
     const mySlot = getMySlot();
     if (!mySlot) return;
-    if (isBoardAnimating()) return; // NEW: block moving another token mid-hop (e.g. during an extra turn)
+    if (isBoardAnimating()) return; // block moving another token mid-hop (e.g. during an extra turn)
 
-    // NEW: use cached state instead of a fresh get(roomRef) round-trip —
-    // see the comment on finalizeRoll() above for why.
     const room = latestRoom;
     const game = latestGame;
     if (!room || !game) return;
@@ -1042,11 +979,11 @@ async function performMove(player, tokenKey, room) {
             : finishOrder;
     }
 
-    // NEW: a token that just completed its full journey home (this
-    // move landed it exactly on index 56) earns a bonus extra turn,
-    // same family as rolling a 6 or landing a capture — UNLESS this
-    // was also that player's very last token (allHome), in which
-    // case there's nothing left for them to play and turn must pass.
+    // A token that just completed its full journey home (this move
+    // landed it exactly on index 56) earns a bonus extra turn, same
+    // family as rolling a 6 or landing a capture — UNLESS this was also
+    // that player's very last token (allHome), in which case there's
+    // nothing left for them to play and turn must pass.
     const tokenJustFinished = index === 56;
     const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0 || tokenJustFinished;
 
@@ -1054,8 +991,6 @@ async function performMove(player, tokenKey, room) {
     if (gameOver) {
         nextTurn = null;
     } else if (allHome) {
-        /* This player just finished — hand off to the next player
-           still in the game, ignore any "extra turn" they'd have earned. */
         nextTurn = getNextTurn(turnOrder, room.players, player, finishOrder);
     } else {
         nextTurn = grantsExtraTurn
@@ -1078,14 +1013,11 @@ async function performMove(player, tokenKey, room) {
 
     await update(roomRef, moveUpdates);
 
-    // NEW: let everyone's chat know a bonus move was earned by finishing
-    // a token (but only when the player still has other tokens to play).
     if (!gameOver && tokenJustFinished && !allHome) {
         const name = room.players[player]?.name || colorLabel(player);
         pushSystemMessage(`🎁 ${name}'s token made it home — bonus move!`);
     }
 
-    // NEW: announce the winner to everyone's chat once the game ends
     if (gameOver && finalOrder && finalOrder.length) {
         const winnerSlot = finalOrder[0];
         const winnerName = room.players[winnerSlot]?.name || colorLabel(winnerSlot);
@@ -1094,33 +1026,40 @@ async function performMove(player, tokenKey, room) {
 }
 
 /* =========================================================
-   NEW: 45-SECOND TURN TIMER
+   TURN TIMER + INACTIVITY AUTO-KICK
+
    `game/turnStartedAt` marks when the CURRENT turn began. Every
    client ticks a local interval that reads the elapsed time off
    that shared timestamp, so all devices count down in sync without
-   needing per-tick database writes. Only the client whose color is
-   actually up acts on expiry (forfeiting the roll, or auto-playing
-   the first legal token if the dice was already rolled), so the
-   timeout is never double-applied.
+   needing per-tick database writes.
+
+   FIXED: previously, ONLY the client whose color was actually up
+   ever called handleTurnTimeout() when the countdown hit zero. If
+   that specific player's tab was closed, backgrounded (many mobile
+   browsers throttle/suspend JS timers in background tabs), or just
+   froze, nobody else was watching — the 45s deadline simply never
+   fired, and the game stalled on that player's turn forever. Now,
+   after a short extra grace window past the deadline, ANY other
+   connected client will force the exact same handleTurnTimeout()
+   logic on the stalled player's behalf. Both paths write identical,
+   derived-from-shared-state updates, so if two clients ever race to
+   act, the second write just re-applies the same values — harmless.
+
+   NEW: a player who lets a turn expire WITHOUT ever rolling has
+   that counted against them in game/missedTurns/<slot>. Reaching
+   MAX_MISSED_TURNS in a row (default 2) auto-kicks them from the
+   room, same as if they'd clicked "Leave Game" themselves. Actually
+   rolling resets their counter back to 0 (see handleDiceClick).
 ========================================================= */
 
 let latestRoom   = null;
 let latestGame   = null;
 let latestPlayers = null;
 
-/* NEW: TWO-PLAYER MODE
+/* TWO-PLAYER MODE
    A room created for exactly 2 players (room.maxPlayers === 2) plays
    Red vs Yellow — player1 (red, top-left) and player4 (yellow,
-   bottom-right), which are diagonally opposite corners on the board.
-   This reads better strategically than two adjacent corners, and it
-   avoids ever putting two players right next to each other.
-
-   Unlike before, this is NOT done by repainting player2's blue
-   corner as yellow — player2 (and player3) are simply never handed
-   out as a seat in this mode (see getNextPlayerSlot above), and
-   room.css hides their now-unused UI. So there is exactly one true
-   yellow corner (player4's) at all times, in every mode. `mode2p`
-   here just drives that hide-unused-seats CSS class. */
+   bottom-right), which are diagonally opposite corners on the board. */
 let mode2p = false;
 
 function colorLabel(slot) {
@@ -1154,38 +1093,55 @@ function clearAllTimerBadges() {
     }
 }
 
-async function handleTurnTimeout(mySlot) {
-    // NEW: use cached state instead of a fresh get(roomRef) round-trip.
+/* Core timeout logic. `slot` is whichever color's turn actually
+   expired — this may be called either by that player's OWN client
+   (normal path) or, after the fallback grace window, by any OTHER
+   connected client stepping in because the active player's client
+   never acted (see tickTurnTimer()). */
+async function handleTurnTimeout(slot) {
     const room = latestRoom;
     const game = latestGame;
     if (!room || !game || game.gameOver) return;
-    if (game.currentTurn !== mySlot) return;
+    if (game.currentTurn !== slot) return;
     if (game.rolling && game.rolling.slot) return; // mid-roll — let it resolve first
 
     const turnOrder   = room.turnOrder || ["player1", "player2", "player3", "player4"];
     const finishOrder = game.finishOrder || [];
 
     if (!game.diceRolled) {
-        // Ran out of time before even rolling — forfeit the turn.
-        const nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+        // Ran out of time before even rolling — genuine inactivity.
+        // Track it, and auto-kick after MAX_MISSED_TURNS in a row.
+        const missedTurns = game.missedTurns || {};
+        const missedSoFar = (missedTurns[slot] || 0) + 1;
+
+        if (missedSoFar >= MAX_MISSED_TURNS) {
+            await kickPlayer(slot, room, game, turnOrder);
+            return;
+        }
+
+        const nextTurn = getNextTurn(turnOrder, room.players, slot, finishOrder);
         await update(roomRef, {
-            "game/diceValue":     0,
-            "game/diceRolled":    false,
-            "game/currentTurn":   nextTurn,
-            "game/turnStartedAt": Date.now()
+            "game/diceValue":              0,
+            "game/diceRolled":             false,
+            "game/currentTurn":            nextTurn,
+            "game/turnStartedAt":          Date.now(),
+            [`game/missedTurns/${slot}`]:  missedSoFar
         });
         return;
     }
 
-    // Dice was rolled but no move was made in time — auto-play the first legal token.
+    // Dice was rolled but no move was made in time — auto-play the
+    // first legal token. Rolling already counts as "showing up"
+    // (handleDiceClick resets this player's missed-turn count to 0
+    // the moment they roll), so this path never adds to the count.
     const dice     = game.diceValue;
-    const tokens   = game.tokens[mySlot];
+    const tokens   = game.tokens[slot];
     const tokenKey = findFirstLegalToken(dice, tokens);
 
     if (tokenKey) {
-        await performMove(mySlot, tokenKey, room);
+        await performMove(slot, tokenKey, room);
     } else {
-        const nextTurn = getNextTurn(turnOrder, room.players, mySlot, finishOrder);
+        const nextTurn = getNextTurn(turnOrder, room.players, slot, finishOrder);
         await update(roomRef, {
             "game/diceValue":     0,
             "game/diceRolled":    false,
@@ -1193,6 +1149,51 @@ async function handleTurnTimeout(mySlot) {
             "game/turnStartedAt": Date.now()
         });
     }
+}
+
+/* NEW: INACTIVITY KICK
+   Removes a no-show player from the room entirely — same effect as
+   them clicking "Leave Game". getNextTurn() already skips any slot
+   no longer present in room.players, so play continues around the
+   vacated seat. If only one active player remains after the kick,
+   the game ends immediately with that player as the winner. */
+async function kickPlayer(slot, room, game, turnOrder) {
+    const finishOrder = game.finishOrder || [];
+    const name = room.players[slot]?.name || colorLabel(slot);
+
+    const remainingPlayers = { ...room.players };
+    delete remainingPlayers[slot];
+
+    const remainingActive = turnOrder.filter(
+        s => remainingPlayers[s] && !finishOrder.includes(s)
+    );
+
+    const gameOver = remainingActive.length <= 1;
+    let finalOrder = finishOrder;
+    let nextTurn    = null;
+
+    if (gameOver) {
+        finalOrder = remainingActive.length === 1
+            ? [...finishOrder, remainingActive[0]]
+            : finishOrder;
+    } else {
+        nextTurn = getNextTurn(turnOrder, remainingPlayers, slot, finishOrder);
+    }
+
+    await update(roomRef, {
+        [`players/${slot}`]:          null,
+        [`game/missedTurns/${slot}`]: null,
+        "game/currentTurn":           gameOver ? null : nextTurn,
+        "game/diceValue":             0,
+        "game/diceRolled":            false,
+        "game/rolling":               null,
+        "game/gameOver":              gameOver,
+        "game/finalOrder":            gameOver ? finalOrder : null,
+        "game/winner":                gameOver ? finalOrder[0] : null,
+        "game/turnStartedAt":         gameOver ? null : Date.now()
+    });
+
+    pushSystemMessage(`👢 ${name} was kicked for inactivity`);
 }
 
 function tickTurnTimer() {
@@ -1220,19 +1221,29 @@ function tickTurnTimer() {
         return;
     }
 
-    const elapsed   = (Date.now() - turnStartedAt) / 1000;
-    const remaining = Math.ceil(TURN_SECONDS - elapsed);
-
+    const elapsedMs = Date.now() - turnStartedAt;
+    const remaining = Math.ceil(TURN_SECONDS - elapsedMs / 1000);
     updateTimerBadges(game.currentTurn, remaining, false);
 
-    const mySlot = getMySlot();
-    if (
-        remaining <= 0 &&
-        mySlot === game.currentTurn &&
-        timeoutHandledForTurn !== turnStartedAt
-    ) {
+    const mySlot    = getMySlot();
+    const overdueMs = elapsedMs - TURN_SECONDS * 1000;
+
+    if (overdueMs < 0 || timeoutHandledForTurn === turnStartedAt) return;
+
+    if (mySlot === game.currentTurn) {
+        // Normal path — the active player's own client handles its
+        // own timeout, right at the 45s mark.
         timeoutHandledForTurn = turnStartedAt;
         handleTurnTimeout(mySlot);
+    } else if (mySlot && overdueMs >= TIMEOUT_FALLBACK_GRACE_MS) {
+        // FIXED: fallback takeover. If the active player's own client
+        // hasn't acted within a few extra seconds past the deadline
+        // (tab closed/backgrounded/frozen), any OTHER connected client
+        // steps in and forces the same timeout logic on their behalf,
+        // so the turn (and the game) is never stuck waiting on a client
+        // that may never come back.
+        timeoutHandledForTurn = turnStartedAt;
+        handleTurnTimeout(game.currentTurn);
     }
 }
 
@@ -1253,11 +1264,10 @@ onValue(roomRef, (snap) => {
     latestGame    = room.game || null;
     latestPlayers = players;
 
-    // NEW: keep the two-player mode flag in sync with the room's
+    // Keep the two-player mode flag in sync with the room's
     // configured capacity, and reflect it on <body> so room.css's
     // `body.mode-2p` override can hide the unused player2/player3
-    // seats everywhere at once. No color repainting happens here
-    // anymore — player4 keeps its own real yellow.
+    // seats everywhere at once.
     mode2p = room.maxPlayers === 2;
     document.body.classList.toggle("mode-2p", mode2p);
 
@@ -1315,10 +1325,6 @@ onValue(roomRef, (snap) => {
    SHOW GAME UI
 ========================================================= */
 
-// Tracks the last game-state "shape" we actually rendered the board
-// for, so we can skip the expensive DOM work below when nothing that
-// affects the board changed (e.g. a rolling-flag write, which fires
-// twice per roll but never moves a token).
 let lastBoardRenderSignature = null;
 
 function showGameUI(room, players) {
@@ -1337,9 +1343,6 @@ function showGameUI(room, players) {
 
     updateDiceBoxes(game, players, mySlot);
 
-    // Only the fields that actually affect what's drawn on the board
-    // or which tokens are clickable — NOT game.rolling, which changes
-    // twice per roll but never touches a token.
     const signature = JSON.stringify({
         tokens:     game.tokens,
         diceValue:  game.diceValue,
@@ -1352,8 +1355,6 @@ function showGameUI(room, players) {
         renderTokens(game);
     }
 
-    // Cheap (just classList/cursor toggles on this player's 4 tokens),
-    // no DOM rebuild — safe to run every time regardless of signature.
     updateTokenClickability(game, mySlot);
 
     updatePlayerLegend(players, game.currentTurn, game.winner);
@@ -1362,18 +1363,6 @@ function showGameUI(room, players) {
 
 /* =========================================================
    UPDATE DICE BOXES
-   Runs on every realtime update. Shows/hides + dims/glows each of
-   the 4 per-color dice boxes based on whose turn it is, whether a
-   seat is filled, and whether it's the local player's own color.
-   Skips overwriting the cube's rotation while a synced roll
-   animation is actively driving that box (syncDiceRollingAnimation
-   owns it then), and only re-rotates a cube when the face it should
-   show has actually changed (lastPaintedFace), so idle re-renders
-   (e.g. a rolling-flag write) never restart a transition needlessly.
-
-   NEW: also locks (pointer-events:none, via .dice-box--locked) every
-   dice box while a token hop animation is in flight, on top of the
-   existing dice-active/idle/mine gating — see isBoardAnimating().
 ========================================================= */
 
 function updateDiceBoxes(game, players, mySlot) {
@@ -1385,7 +1374,7 @@ function updateDiceBoxes(game, players, mySlot) {
 
         const playerExists = !!players[slot];
         box.classList.toggle("dice-box--empty", !playerExists);
-        box.classList.toggle("dice-box--locked", locked); // NEW
+        box.classList.toggle("dice-box--locked", locked);
 
         if (!playerExists) {
             box.classList.remove("dice-active", "dice-idle", "dice-box--mine");
@@ -1412,7 +1401,7 @@ function updateDiceBoxes(game, players, mySlot) {
 }
 
 /* =========================================================
-   PLAYER LEGEND — color swatch beside each player's name
+   PLAYER LEGEND
 ========================================================= */
 
 function updatePlayerLegend(players, currentTurn, winner) {
@@ -1432,9 +1421,7 @@ function updatePlayerLegend(players, currentTurn, winner) {
 }
 
 /* =========================================================
-   HOME LABELS — player name shown right on the board, beside
-   that color's own corner/home circle (label-red, label-blue,
-   label-green, label-yellow in room.html/room.css).
+   HOME LABELS
 ========================================================= */
 
 function updateHomeLabels(players) {
@@ -1450,42 +1437,13 @@ function updateHomeLabels(players) {
 }
 
 /* =========================================================
-   RENDER TOKENS — placed onto the real c-ROW-COL grid cells
-
-   Token movement is animated as a series of hops instead of an
-   instant DOM re-parent. Each realtime update is diffed against the
-   PREVIOUS `game.tokens` snapshot to detect genuine forward moves. A
-   token that advanced N cells forward hops through each of those N
-   intermediate cells one at a time — 1 step is a single hop straight
-   to the destination and stop; 2 steps hops through the in-between
-   cell, then hops to the destination and stop; 3 steps hops, hops,
-   hops, then stops — always exactly matching the dice count, with
-   the tap sound played once per hop.
-
-   NEW: any token captured (knocked back to home) IN THE SAME UPDATE
-   as a hop-animated move is now held in place — not snapped back
-   instantly — until that hop animation finishes landing. This keeps
-   a capture from visually vanishing before the capturing token has
-   actually arrived on its cell. Once every hop from this update has
-   landed, held tokens snap to their new spot and any finish/game-over
-   popup for this update is shown (see resolveResultPopups()).
-
-   A fresh game start (all tokens reset to -1, no forward move to
-   wait on) is unaffected and still snaps instantly, same as before.
+   RENDER TOKENS
 ========================================================= */
 
-let previousTokensSnapshot = null; // last game.tokens we rendered, for diffing
+let previousTokensSnapshot = null;
 
-// Per-hop animation duration. Sped up from the original 550ms for a
-// snappier feel — still comfortably longer than a flicker so each
-// hop and its tap sound stay readable even on a 6-step move.
 const HOP_STEP_MS = 380;
 
-/* Same placement rules the previous renderTokens() had inline (home
-   park slot / individual finish slot / track-or-home-stretch cell),
-   factored out so the hop animation can look up a token's TRUE
-   final cell — including its correctly-ordered finish-slot — without
-   duplicating that bookkeeping. */
 function computeTokenPlacements(game) {
     const placements = {};
 
@@ -1504,7 +1462,7 @@ function computeTokenPlacements(game) {
             } else if (index === 56) {
                 cellId = FINISH_SLOT_CELLS[player]?.[finishSlot];
                 finishSlot++;
-                if (!cellId) cellId = `hc-${COLOR_MAP[player]}`; // fallback, see original comment
+                if (!cellId) cellId = `hc-${COLOR_MAP[player]}`; // fallback
             } else {
                 const coord = getAbsoluteCoord(player, index);
                 cellId = coord ? `c-${coord[0]}-${coord[1]}` : null;
@@ -1517,10 +1475,6 @@ function computeTokenPlacements(game) {
     return placements;
 }
 
-/* Cell id for one INTERMEDIATE step of a hop (never the final
-   landing cell — that always comes from computeTokenPlacements() so
-   it correctly resolves to that token's own individual finish-slot
-   cell when the move ends on 56). */
 function getIntermediateCellId(player, index) {
     if (index >= 0 && index <= 50) {
         const coord = getAbsoluteCoord(player, index);
@@ -1533,11 +1487,6 @@ function getIntermediateCellId(player, index) {
     return null;
 }
 
-/* FLIP-style single hop: measure where `el` visually is right now,
-   move it in the DOM to `destCell`, measure where it ends up there,
-   then animate the visual gap between those two points using the
-   Web Animations API — with a scaled-up midpoint frame so it reads
-   as a little jump/bounce rather than a flat slide. */
 function hopTokenToCell(el, destCell, durationMs) {
     return new Promise((resolve) => {
         if (!el || !destCell) { resolve(); return; }
@@ -1552,7 +1501,7 @@ function hopTokenToCell(el, destCell, durationMs) {
         if (!dx && !dy) { resolve(); return; }
 
         const hopHeight = Math.max(10, Math.min(startRect.width * 0.9, 18));
-        el.style.zIndex = "40"; // stay above everything else mid-flight
+        el.style.zIndex = "40";
 
         let settled = false;
         const settle = () => {
@@ -1575,21 +1524,14 @@ function hopTokenToCell(el, destCell, durationMs) {
             return;
         }
 
-        setTimeout(settle, durationMs + 100); // safety net in case onfinish never fires
+        setTimeout(settle, durationMs + 100);
     });
 }
 
-/* Steps a token through every intermediate cell between fromIndex
-   and toIndex, one hop at a time, playing the tap sound once per
-   hop — always exactly matching the dice count that produced this
-   move (1 step = 1 tap/hop, 2 steps = 2 taps/hops, etc). */
 async function animateTokenHop(player, tokenKey, fromIndex, toIndex, finalCellId) {
     const el = document.getElementById(`${player}-${tokenKey}`);
     if (!el) return;
 
-    // Clear any leftover stacked-token offsets so the FLIP measurements
-    // below reflect the token's true resting position; spreadStackedTokens()
-    // re-applies stacking once it's landed, if the destination is still shared.
     el.style.position = "";
     el.style.top       = "";
     el.style.left      = "";
@@ -1607,19 +1549,13 @@ async function animateTokenHop(player, tokenKey, fromIndex, toIndex, finalCellId
         const cell = cellId ? document.getElementById(cellId) : null;
         if (!cell) continue;
 
-        // FIXED: awaited so the tap sound reliably fires (see the
-        // "TAP SOUND" section above) before the hop it's paired with plays.
         await playTapSound();
         await hopTokenToCell(el, cell, HOP_STEP_MS);
     }
 
-    spreadStackedTokens(); // re-settle neatly if it landed on an occupied cell
+    spreadStackedTokens();
 }
 
-/* Fires the finish/game-over popup logic for a given game snapshot.
-   Split out from renderTokens()/the realtime listener so it can be
-   called either immediately (nothing animating) or held until any
-   in-flight hop for this update has landed (see renderTokens()). */
 function resolveResultPopups(game) {
     handleResultPopups(game, latestPlayers || {});
 }
@@ -1628,7 +1564,7 @@ function renderTokens(game) {
     const placements      = computeTokenPlacements(game);
     const prevTokens       = previousTokensSnapshot;
     const movesToAnimate   = [];
-    const capturedKeys     = []; // tokens knocked backward in this same update
+    const capturedKeys     = [];
 
     if (prevTokens) {
         for (const player in game.tokens) {
@@ -1638,11 +1574,6 @@ function renderTokens(game) {
 
                 if (typeof oldIndex !== "number") continue;
 
-                // Only a genuine forward move (a real dice roll, 1-6
-                // steps) gets hop-animated. Anything that moved
-                // BACKWARD — a capture sending it to -1, or a brand
-                // new game resetting 56 -> -1 — still snaps instantly,
-                // since there's no forward path to hop along.
                 if (newIndex > oldIndex && (newIndex - oldIndex) <= 6) {
                     movesToAnimate.push({ player, tokenKey, from: oldIndex, to: newIndex });
                 } else if (newIndex < oldIndex) {
@@ -1656,14 +1587,9 @@ function renderTokens(game) {
 
     const animatingIds = new Set(movesToAnimate.map(m => `${m.player}-${m.tokenKey}`));
 
-    // NEW: only hold captured tokens back if something is actually
-    // hopping this cycle — a fresh "Start Game" reset (56/whatever -> -1
-    // on every token, no forward move at all) still snaps instantly.
     const holdCaptures = movesToAnimate.length > 0;
     const heldIds = new Set(holdCaptures ? capturedKeys : []);
 
-    // Everything NOT being hop-animated and NOT a held-back capture is
-    // placed straight onto its final cell, exactly like before.
     for (const key in placements) {
         if (animatingIds.has(key) || heldIds.has(key)) continue;
         const el     = document.getElementById(key);
@@ -1675,14 +1601,10 @@ function renderTokens(game) {
     spreadStackedTokens();
 
     if (movesToAnimate.length === 0) {
-        // Nothing to wait on this cycle — resolve any finish/game-over
-        // popup immediately, same timing as before.
         resolveResultPopups(game);
         return;
     }
 
-    // NEW: block dice/token clicks and hold back captures + popups
-    // until every hop kicked off by this update has landed.
     boardAnimationCount += movesToAnimate.length;
     updateDiceBoxes(latestGame || game, latestPlayers || {}, getMySlot());
 
@@ -1690,10 +1612,8 @@ function renderTokens(game) {
         const key = `${m.player}-${m.tokenKey}`;
         animateTokenHop(m.player, m.tokenKey, m.from, m.to, placements[key]).then(() => {
             boardAnimationCount = Math.max(0, boardAnimationCount - 1);
-            if (boardAnimationCount > 0) return; // other hops from this update still in flight
+            if (boardAnimationCount > 0) return;
 
-            // Every hop from this update has landed — release held captures,
-            // then re-check for a finish/game-over popup and unlock inputs.
             heldIds.forEach(hKey => {
                 const el     = document.getElementById(hKey);
                 const cellId = placements[hKey];
@@ -1704,9 +1624,6 @@ function renderTokens(game) {
 
             resolveResultPopups(game);
 
-            // Re-run the cheap clickability/dice-box passes so the
-            // unlock is reflected immediately, not on the next
-            // unrelated Firebase update.
             if (latestGame) {
                 updateTokenClickability(latestGame, getMySlot());
                 updateDiceBoxes(latestGame, latestPlayers || {}, getMySlot());
@@ -1717,12 +1634,6 @@ function renderTokens(game) {
 
 /* =========================================================
    SPREAD STACKED TOKENS
-   When 2+ tokens (same or different colors) land on the same
-   cell — very common on safe cells — they were being appended
-   on top of each other. The topmost one soaked up every click
-   and the token(s) underneath became permanently unclickable.
-   This nudges each token in a shared cell into its own corner
-   so every token keeps its own clickable hit area.
 ========================================================= */
 
 function spreadStackedTokens() {
@@ -1769,19 +1680,6 @@ function spreadStackedTokens() {
 
 /* =========================================================
    TOKEN CLICK HANDLING
-   Previously this rebuilt all 16 token DOM nodes (clone + replace)
-   on every single realtime update, purely to avoid stacking up
-   duplicate click listeners. That's real DOM work happening on
-   every dice-rolling flag change too, not just moves — competing
-   with the roll animation for main-thread time and showing up as
-   intermittent stutter depending on device load/timing.
-
-   Fix: bind ONE delegated click listener on the board itself, once,
-   at startup. It never needs to be re-bound because tokens stay
-   inside #ludo-board even when JS moves them between cells. Legality
-   highlighting (the "clickable" class) is still recomputed every
-   render since which tokens are legal genuinely does change — but
-   that's just 4 classList/cursor toggles, not a DOM rebuild.
 ========================================================= */
 
 let tokenClickDelegationBound = false;
@@ -1806,7 +1704,6 @@ function bindTokenClickDelegation() {
 }
 
 function updateTokenClickability(game, mySlot) {
-    // Clear stale highlighting on everyone's tokens first
     for (let i = 1; i <= 4; i++) {
         const slot   = "player" + i;
         const tokens = game.tokens[slot];
@@ -1825,7 +1722,6 @@ function updateTokenClickability(game, mySlot) {
     const myTokenData = game.tokens[mySlot];
     if (!myTokenData) return;
 
-    // NEW: also require no token hop currently in flight — see isBoardAnimating().
     const canInteract = !game.gameOver && game.currentTurn === mySlot && game.diceRolled && !isBoardAnimating();
     const dice = game.diceValue;
 
@@ -1844,8 +1740,6 @@ function updateTokenClickability(game, mySlot) {
     }
 }
 
-// Bind once at startup — #ludo-board exists in the DOM immediately
-// (it's just display:none inside #game-container until play starts).
 bindTokenClickDelegation();
 
 /* =========================================================
@@ -1878,38 +1772,15 @@ function updatePlayerSlots(players) {
 window.handleTokenClick = handleTokenClick;
 
 /* =========================================================
-   NEW: LIVE TEXT CHAT SYSTEM
-   Self-contained real-time chat scoped to this room via
-   rooms/ROOM_CODE/chat. Nothing above this section was touched to
-   add it — the only changes elsewhere are three one-line
-   pushSystemMessage(...) calls (join/leave/win) and one
-   destroyChat() call in leaveRoom(), all clearly marked "NEW" above.
-
-   Firebase shape:
-     rooms/ROOM_CODE/chat/<pushId>: {
-         sender:      "player1".."player4" | "system",
-         playerName:  string (omitted for system messages),
-         message:     string,
-         timestamp:   number (ms)
-     }
-
-   Reusable functions (per spec):
-     initializeChat()    — attach the onChildAdded listener
-     sendMessage()        — validate, rate-limit, and push the local
-                             player's message
-     addMessage()          — render one incoming/local message bubble
-     addSystemMessage()    — render a system message locally only
-     loadRecentMessages()  — (folded into initializeChat(); see note
-                             below) fetches only the newest 100
-     destroyChat()         — detach the listener, called on leaveRoom()
+   LIVE TEXT CHAT SYSTEM
 ========================================================= */
 
 const chatRef = ref(db, `rooms/${roomCode}/chat`);
 
-const CHAT_HISTORY_LIMIT   = 100;  // "load only the newest 100 messages"
-const CHAT_RATE_LIMIT_MS   = 500;  // one message per 500ms per client
-const CHAT_MAX_LENGTH      = 200;  // characters
-const CHAT_NEAR_BOTTOM_PX  = 80;   // "near the bottom" threshold for auto-scroll
+const CHAT_HISTORY_LIMIT   = 100;
+const CHAT_RATE_LIMIT_MS   = 500;
+const CHAT_MAX_LENGTH      = 200;
+const CHAT_NEAR_BOTTOM_PX  = 80;
 
 const chatToggleBtn   = document.getElementById("chat-toggle-btn");
 const chatPanel       = document.getElementById("chat-panel");
@@ -1920,24 +1791,17 @@ const chatSendBtn     = document.getElementById("chat-send-btn");
 const chatUnreadBadge = document.getElementById("chat-unread-badge");
 const chatCharCounter = document.getElementById("chat-char-counter");
 
-let chatUnsubscribe   = null; // the onChildAdded detach function, used by destroyChat()
+let chatUnsubscribe   = null;
 let chatIsOpen        = false;
 let chatUnreadCount   = 0;
-let lastMessageSentAt = 0;    // client-side rate-limit clock
+let lastMessageSentAt = 0;
 
-/* loadRecentMessages() + the "only new messages after that" live
-   feed are the SAME Firebase call: onChildAdded on a query with
-   limitToLast(100) fires once for each of the (up to) 100 existing
-   messages when attached, then fires again for every NEW message
-   pushed afterwards — it never re-downloads the whole chat node on
-   each update, satisfying both the "load only newest 100" and the
-   "onChildAdded only, never onValue for chat" requirements at once. */
 function loadRecentMessages() {
     return query(chatRef, limitToLast(CHAT_HISTORY_LIMIT));
 }
 
 function initializeChat() {
-    if (!chatMessagesEl) return; // chat markup not present on this page — no-op
+    if (!chatMessagesEl) return;
 
     const chatQuery = loadRecentMessages();
 
@@ -1948,7 +1812,7 @@ function initializeChat() {
 
 function destroyChat() {
     if (chatUnsubscribe) {
-        chatUnsubscribe(); // detaches the Firebase listener — prevents memory leaks
+        chatUnsubscribe();
         chatUnsubscribe = null;
     }
 }
@@ -1970,14 +1834,9 @@ function formatChatTime(timestamp) {
     const minutes = String(d.getMinutes()).padStart(2, "0");
     const ampm = hours >= 12 ? "PM" : "AM";
     hours = hours % 12 || 12;
-    return `${hours}:${minutes} ${ampm}`; // e.g. "8:41 PM" — no date, per spec
+    return `${hours}:${minutes} ${ampm}`;
 }
 
-/* addMessage() — renders one chat bubble (own message, other
-   player's message, or a system pill). Message text is inserted via
-   textContent ONLY, never innerHTML/insertAdjacentHTML — this is
-   what actually prevents HTML/JS injection; raw markup in a message
-   is displayed as literal text, never parsed or executed. */
 function addMessage(data, id) {
     if (!chatMessagesEl || !data) return;
 
@@ -2009,7 +1868,7 @@ function addMessage(data, id) {
 
         const textEl = document.createElement("div");
         textEl.className = "chat-bubble__text";
-        textEl.textContent = data.message; // plain text only — see comment above
+        textEl.textContent = data.message;
 
         const timeEl = document.createElement("div");
         timeEl.className = "chat-bubble__time";
@@ -2020,36 +1879,24 @@ function addMessage(data, id) {
         bubble.appendChild(bubbleInner);
     }
 
-    bubble.classList.add("chat-fade-in"); // smooth message fade-in
+    bubble.classList.add("chat-fade-in");
     chatMessagesEl.appendChild(bubble);
 
-    // Unread badge + notification sound — only for genuinely new
-    // messages from someone else, and only while the panel is closed.
     if (data.sender !== "system" && data.sender !== mySlot && !chatIsOpen) {
         chatUnreadCount++;
         updateChatUnreadBadge();
         playChatNotificationSound();
     }
 
-    // Auto-scroll: only if the reader was already near the bottom
-    // (or it's their own message — always jump to it).
     if (wasNearBottom || data.sender === mySlot) {
         scrollChatToBottom();
     }
 }
 
-/* Renders a system message locally only (no Firebase write) — kept
-   as its own function per the requested API, though every actual
-   in-game event below goes through pushSystemMessage() instead so
-   every connected client sees it. */
 function addSystemMessage(text) {
     addMessage({ sender: "system", message: text, timestamp: Date.now() }, `local-${Date.now()}`);
 }
 
-/* Writes a system event (join/leave/game start/win) into the shared
-   chat node so every client's own onChildAdded listener renders it
-   in real time — this is how join/leave/start/win messages reach
-   everyone, not just the client that triggered the event. */
 function pushSystemMessage(text) {
     push(chatRef, {
         sender: "system",
@@ -2068,11 +1915,6 @@ function updateChatUnreadBadge() {
     }
 }
 
-/* Optional notification sound for incoming messages — synthesized
-   via the same Web Audio context the dice sound already sets up, so
-   no extra sound asset/file is required. Silently skipped if the
-   context isn't running yet (no user gesture has unlocked it) or
-   isn't available at all — never blocks the chat itself. */
 function playChatNotificationSound() {
     try {
         if (!audioCtx || audioCtx.state === "suspended") return;
@@ -2097,7 +1939,7 @@ function openChatPanel() {
     chatUnreadCount = 0;
     updateChatUnreadBadge();
     scrollChatToBottom();
-    chatInput?.focus(); // keeps the typing cursor ready in the input
+    chatInput?.focus();
 }
 
 function closeChatPanel() {
@@ -2115,9 +1957,6 @@ function updateChatCharCounter() {
     chatCharCounter.textContent = `${chatInput.value.length}/${CHAT_MAX_LENGTH}`;
 }
 
-/* Lightweight auto-grow for the input — stays single-line by
-   default, expands up to ~4 lines for multi-line (Shift+Enter)
-   messages, then scrolls internally. */
 function autoGrowChatInput() {
     if (!chatInput) return;
     chatInput.style.height = "auto";
@@ -2128,15 +1967,12 @@ async function sendMessage() {
     if (!chatInput) return;
 
     const mySlot = getMySlot();
-    if (!mySlot) return; // must have joined a seat to chat
+    if (!mySlot) return;
 
-    // Validation: block empty / whitespace-only messages, trim
-    // surrounding whitespace, enforce the 200-char cap.
     const raw = chatInput.value.trim();
     if (!raw) return;
-    if (raw.length > CHAT_MAX_LENGTH) return; // input also has maxlength=200 as a first line of defense
+    if (raw.length > CHAT_MAX_LENGTH) return;
 
-    // Rate limiting — one message per 500ms per client
     const now = Date.now();
     if (now - lastMessageSentAt < CHAT_RATE_LIMIT_MS) return;
     lastMessageSentAt = now;
@@ -2148,8 +1984,6 @@ async function sendMessage() {
     autoGrowChatInput();
 
     try {
-        // push() auto-generates the chronologically-sortable message ID —
-        // IDs are never hand-rolled, per spec.
         await push(chatRef, {
             sender: mySlot,
             playerName,
@@ -2160,7 +1994,7 @@ async function sendMessage() {
         console.error("Failed to send chat message:", err);
     }
 
-    chatInput.focus(); // typing cursor stays in the input after sending
+    chatInput.focus();
 }
 
 chatSendBtn?.addEventListener("click", sendMessage);
@@ -2169,7 +2003,6 @@ chatInput?.addEventListener("input", () => {
     autoGrowChatInput();
 });
 
-// Enter sends the message; Shift+Enter inserts a newline instead.
 chatInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -2177,7 +2010,4 @@ chatInput?.addEventListener("keydown", (e) => {
     }
 });
 
-// Chat is readable from the moment the page loads — waiting room
-// included, not just once the game starts — so start the listener
-// right away rather than gating it behind joining a seat.
 initializeChat();
