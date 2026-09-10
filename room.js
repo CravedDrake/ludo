@@ -1063,13 +1063,13 @@ async function performMove(player, tokenKey, room) {
         }
     }
 
-    // Trigger capture sound + animation locally if any tokens were captured
-    if (capturedSlots.length > 0) {
-        playCaptureSound();
-        capturedSlots.forEach(({ player: p, tokenKey: t }) => {
-            triggerCaptureAnimation(p, t);
-        });
-    }
+  // Trigger capture animation locally.
+// Sound is synchronized through Firebase.
+if (capturedSlots.length > 0) {
+    capturedSlots.forEach(({ player: p, tokenKey: t }) => {
+        triggerCaptureAnimation(p, t);
+    });
+}
 
     const myTokens = { ...game.tokens[player], [tokenKey]: { index } };
     const allHome  = Object.values(myTokens).every(t => t.index === 56);
@@ -1100,11 +1100,11 @@ async function performMove(player, tokenKey, room) {
     // nothing left for them to play and turn must pass.
     const tokenJustFinished = index === 56;
 
-    // Play home sound + animation when a token reaches the finish
-    if (tokenJustFinished) {
-        playHomeSound();
-        triggerHomeAnimation(player, tokenKey);
-    }
+// Trigger home animation locally.
+// Sound is synchronized through Firebase.
+if (tokenJustFinished) {
+    triggerHomeAnimation(player, tokenKey);
+}
 
     const grantsExtraTurn = dice === 6 || Object.keys(captureUpdates).length > 0 || tokenJustFinished;
 
@@ -1119,6 +1119,24 @@ async function performMove(player, tokenKey, room) {
             : getNextTurn(turnOrder, room.players, player, finishOrder);
     }
 
+    let soundEvent = null;
+
+    if (capturedSlots.length > 0) {
+        soundEvent = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: "capture",
+            player,
+            timestamp: Date.now()
+        };
+    } else if (tokenJustFinished) {
+        soundEvent = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            type: "home",
+            player,
+            timestamp: Date.now()
+        };
+    }
+
     const moveUpdates = {
         ...captureUpdates,
         [`game/tokens/${player}/${tokenKey}/index`]: index,
@@ -1129,7 +1147,10 @@ async function performMove(player, tokenKey, room) {
         "game/gameOver":      gameOver,
         "game/finalOrder":    gameOver ? finalOrder : null,
         "game/winner":        gameOver ? finalOrder[0] : null,
-        "game/turnStartedAt": gameOver ? null : Date.now()
+        "game/turnStartedAt": gameOver ? null : Date.now(),
+
+        // Broadcast sound event to every player
+        "game/soundEvent": soundEvent
     };
 
     await update(roomRef, moveUpdates);
@@ -1176,6 +1197,9 @@ async function performMove(player, tokenKey, room) {
 let latestRoom   = null;
 let latestGame   = null;
 let latestPlayers = null;
+
+let lastPlayedSoundEventId = null;
+let soundEventListenerReady = false;
 
 /* TWO-PLAYER MODE
    A room created for exactly 2 players (room.maxPlayers === 2) plays
@@ -1384,6 +1408,30 @@ onValue(roomRef, (snap) => {
     latestRoom    = room;
     latestGame    = room.game || null;
     latestPlayers = players;
+
+    // =========================================================
+    // GLOBAL GAME SOUND SYNC
+    // =========================================================
+
+    const soundEvent = room.game?.soundEvent;
+
+    if (!soundEventListenerReady) {
+        // Don't play an old sound when joining/reloading.
+        lastPlayedSoundEventId = soundEvent?.id || null;
+        soundEventListenerReady = true;
+    } else if (
+        soundEvent &&
+        soundEvent.id &&
+        soundEvent.id !== lastPlayedSoundEventId
+    ) {
+        lastPlayedSoundEventId = soundEvent.id;
+
+        if (soundEvent.type === "capture") {
+            playCaptureSound();
+        } else if (soundEvent.type === "home") {
+            playHomeSound();
+        }
+    }
 
     // Keep the two-player mode flag in sync with the room's
     // configured capacity, and reflect it on <body> so room.css's
