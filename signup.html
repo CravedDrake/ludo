@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create account - ClubHub</title>
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="signup.css">
+</head>
+
+<body>
+
+<div class="login-page">
+    <div class="background">
+        <div class="glow glow-one"></div>
+    </div>
+
+    <div class="login-container">
+
+        <!-- LEFT BRANDING -->
+        <section class="brand-section">
+
+            <div class="brand-logo">
+
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 3L20 7.5V12.5C20 17.2 16.8 20.7 12 22C7.2 20.7 4 17.2 4 12.5V7.5L12 3Z"/>
+                        <path d="M8 10.5L12 8L16 10.5V14.5L12 17L8 14.5V10.5Z"/>
+                    </svg>
+                </div>
+
+                <div>
+                    <h2>Club<span>Hub</span></h2>
+                    <p>Campus Community</p>
+                </div>
+
+            </div>
+
+            <div class="brand-content">
+
+                <p class="eyebrow">JOIN YOUR CAMPUS</p>
+
+                <h1>
+                    Join.
+                    <br>
+                    <span>Belong.</span>
+                    <br>
+                    Lead.
+                </h1>
+
+                <p class="brand-description">
+                    Create a free account to find clubs you care about,
+                    RSVP to events, and keep up with everything happening
+                    on campus.
+                </p>
+
+            </div>
+
+            <ul class="perks">
+
+                <li class="perk">
+                    <div class="perk-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <circle cx="11" cy="11" r="6"/>
+                            <path d="M20 20L15.5 15.5"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <strong>Find your clubs</strong>
+                        <span>Browse 25+ clubs by interest and join in one tap.</span>
+                    </div>
+                </li>
+
+                <li class="perk">
+                    <div class="perk-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <rect x="4" y="5" width="16" height="15" rx="2"/>
+                            <path d="M4 10H20"/>
+                            <path d="M9 3V7"/>
+                            <path d="M15 3V7"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <strong>Never miss an event</strong>
+                        <span>RSVP and get reminders for 50+ events in one place.</span>
+                    </div>
+                </li>
+
+                <li class="perk">
+                    <div class="perk-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <circle cx="9" cy="8" r="3.5"/>
+                            <path d="M2.5 20C2.5 16.7 5.4 14.5 9 14.5C12.6 14.5 15.5 16.7 15.5 20"/>
+                            <path d="M16 4.8C17.7 5.2 19 6.6 19 8.5C19 10.4 17.7 11.8 16 12.2"/>
+                            <path d="M18.5 14.8C20.5 15.6 21.5 17.4 21.5 20"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <strong>Run your own club</strong>
+                        <span>Manage members and announcements as an officer.</span>
+                    </div>
+                </li>
+
+            </ul>
+
+        </section>
+
+
+        <!-- SIGNUP SECTION -->
+        <section class="login-section">
+
+            <div class="login-card signup-card">
+
+                <!-- Mobile Logo -->
+                <div class="mobile-logo">
+
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 3L20 7.5V12.5C20 17.2 16.8 20.7 12 22C7.2 20.7 4 17.2 4 12.5V7.5L12 3Z"/>
+                            <path d="M8 10.5L12 8L16 10.5V14.5L12 17L8 14.5V10.5Z"/>
+                        </svg>
+                    </div>
+
+                    <div>
+                        <h2>Club<span>Hub</span></h2>
+                    </div>
+
+                </div>
+
+
+                <!-- ========== SIGNUP VIEW ========== -->
+                <div id="signupView">
+
+                    <!-- Header -->
+                    <div class="login-header">
+
+                        <div class="welcome-icon">
+                            <svg viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="1.8">
+                                <path d="M16 21V19C16 16.8 14.2 15 12 15H7C4.8 15 3 16.8 3 19V21"/>
+                                <circle cx="9.5" cy="7" r="4"/>
+                                <path d="M19 8V14"/>
+                                <path d="M16 11H22"/>
+                            </svg>
+                        </div>
+
+                        <h2>Create your account</h2>
+
+                        <p>
+                            Use your college email to get started
+                        </p>
+
+                    </div>
+
+
+                    <!-- FORM -->
+                    <form id="signupForm" novalidate>
+
+                        <!-- Full name -->
+                        <div class="form-group" data-field="fullName">
+
+                            <label for="fullName">Full name</label>
+
+                            <div class="input-wrapper">
+
+                                <svg class="input-icon"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="1.8">
+
+                                    <path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21"/>
+                                    <circle cx="12" cy="7" r="4"/>
+
+                                </svg>
+
+                                <input
+                                    id="fullName"
+                                    name="fullName"
+                                    type="text"
+                                    placeholder="Your full name"
+                                    autocomplete="name"
+                                    aria-describedby="fullName-error"
+                                    required
+                                >
+
+                            </div>
+
+                            <p class="field-error" id="fullName-error"></p>
+
+                        </div>
+
+
+                        <!-- Email -->
+                        <div class="form-group" data-field="email">
+
+                            <label for="email">College email</label>
+
+                            <div class="input-wrapper">
+
+                                <svg class="input-icon"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="1.8">
+
+                                    <rect x="3" y="5"
+                                          width="18"
+                                          height="14"
+                                          rx="2"/>
+
+                                    <path d="M3 7L12 13L21 7"/>
+
+                                </svg>
+
+                                <input
+                                    id="email"
+                                    name="email"
+                                    type="email"
+                                    placeholder="you@college.edu"
+                                    autocomplete="email"
+                                    aria-describedby="email-error"
+                                    required
+                                >
+
+                            </div>
+
+                            <p class="field-error" id="email-error"></p>
+
+                        </div>
+
+
+                        <!-- Department + Year -->
+                        <div class="form-row">
+
+                            <div class="form-group" data-field="department">
+
+                                <label for="department">Department</label>
+
+                                <div class="input-wrapper no-icon">
+
+                                    <input
+                                        id="department"
+                                        name="department"
+                                        type="text"
+                                        placeholder="e.g. Computer Science"
+                                        autocomplete="off"
+                                        aria-describedby="department-error"
+                                        required
+                                    >
+
+                                </div>
+
+                                <p class="field-error" id="department-error"></p>
+
+                            </div>
+
+                            <div class="form-group" data-field="year">
+
+                                <label for="year">Year</label>
+
+                                <div class="input-wrapper">
+
+                                    <select
+                                        id="year"
+                                        name="year"
+                                        aria-describedby="year-error"
+                                        required
+                                    >
+                                        <option value="" selected disabled>Select year</option>
+                                        <option value="1">1st year</option>
+                                        <option value="2">2nd year</option>
+                                        <option value="3">3rd year</option>
+                                        <option value="4">4th year</option>
+                                        <option value="pg">Postgraduate</option>
+                                    </select>
+
+                                    <svg class="select-chevron"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="2">
+
+                                        <path d="M6 9L12 15L18 9"/>
+
+                                    </svg>
+
+                                </div>
+
+                                <p class="field-error" id="year-error"></p>
+
+                            </div>
+
+                        </div>
+
+
+                        <!-- Password -->
+                        <div class="form-group" data-field="password">
+
+                            <label for="password">Password</label>
+
+                            <div class="input-wrapper">
+
+                                <svg class="input-icon"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="1.8">
+
+                                    <rect x="4" y="10"
+                                          width="16"
+                                          height="11"
+                                          rx="2"/>
+
+                                    <path d="M8 10V7C8 4.8 9.8 3 12 3C14.2 3 16 4.8 16 7V10"/>
+
+                                </svg>
+
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    placeholder="Create a password"
+                                    autocomplete="new-password"
+                                    aria-describedby="password-hint password-error"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="password"
+                                    aria-label="Show password"
+                                    aria-pressed="false"
+                                >
+
+                                    <svg class="icon-eye"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.8">
+
+                                        <path d="M2 12C3.3 9 7 5 12 5C17 5 20.7 9 22 12C20.7 15 17 19 12 19C7 19 3.3 15 2 12Z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+
+                                    </svg>
+
+                                    <svg class="icon-eye-off"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.8"
+                                         hidden>
+
+                                        <path d="M3 3L21 21"/>
+                                        <path d="M10.6 5.1C11 5 11.5 5 12 5C17 5 20.7 9 22 12C21.5 13.1 20.6 14.4 19.4 15.6"/>
+                                        <path d="M6.6 6.6C4.5 8 2.9 10 2 12C3.3 15 7 19 12 19C13.7 19 15.2 18.6 16.5 17.9"/>
+                                        <path d="M9.9 9.9A3 3 0 0 0 14.1 14.1"/>
+
+                                    </svg>
+
+                                </button>
+
+                            </div>
+
+                            <div class="strength" id="strength" data-level="0">
+
+                                <div class="strength-bars" aria-hidden="true">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+
+                                <p class="field-hint" id="password-hint">
+                                    Use at least 8 characters with letters and numbers.
+                                </p>
+
+                            </div>
+
+                            <p class="field-error" id="password-error"></p>
+
+                        </div>
+
+
+                        <!-- Confirm password -->
+                        <div class="form-group" data-field="confirmPassword">
+
+                            <label for="confirmPassword">Confirm password</label>
+
+                            <div class="input-wrapper">
+
+                                <svg class="input-icon"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="1.8">
+
+                                    <rect x="4" y="10"
+                                          width="16"
+                                          height="11"
+                                          rx="2"/>
+
+                                    <path d="M8 10V7C8 4.8 9.8 3 12 3C14.2 3 16 4.8 16 7V10"/>
+
+                                </svg>
+
+                                <input
+                                    id="confirmPassword"
+                                    name="confirmPassword"
+                                    type="password"
+                                    placeholder="Re-enter your password"
+                                    autocomplete="new-password"
+                                    aria-describedby="confirmPassword-error"
+                                    required
+                                >
+
+                                <button
+                                    type="button"
+                                    class="password-toggle"
+                                    data-target="confirmPassword"
+                                    aria-label="Show password"
+                                    aria-pressed="false"
+                                >
+
+                                    <svg class="icon-eye"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.8">
+
+                                        <path d="M2 12C3.3 9 7 5 12 5C17 5 20.7 9 22 12C20.7 15 17 19 12 19C7 19 3.3 15 2 12Z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+
+                                    </svg>
+
+                                    <svg class="icon-eye-off"
+                                         viewBox="0 0 24 24"
+                                         fill="none"
+                                         stroke="currentColor"
+                                         stroke-width="1.8"
+                                         hidden>
+
+                                        <path d="M3 3L21 21"/>
+                                        <path d="M10.6 5.1C11 5 11.5 5 12 5C17 5 20.7 9 22 12C21.5 13.1 20.6 14.4 19.4 15.6"/>
+                                        <path d="M6.6 6.6C4.5 8 2.9 10 2 12C3.3 15 7 19 12 19C13.7 19 15.2 18.6 16.5 17.9"/>
+                                        <path d="M9.9 9.9A3 3 0 0 0 14.1 14.1"/>
+
+                                    </svg>
+
+                                </button>
+
+                            </div>
+
+                            <p class="field-error" id="confirmPassword-error"></p>
+
+                        </div>
+
+
+                        <!-- Terms -->
+                        <div class="terms-row" data-field="terms">
+
+                            <label class="terms">
+
+                                <input
+                                    type="checkbox"
+                                    id="terms"
+                                    name="terms"
+                                    aria-describedby="terms-error"
+                                >
+
+                                <span class="custom-checkbox" aria-hidden="true"></span>
+
+                                <span>
+                                    I agree to the
+                                    <a href="#">Terms of Use</a>
+                                    and
+                                    <a href="#">Privacy Policy</a>
+                                </span>
+
+                            </label>
+
+                            <p class="field-error" id="terms-error"></p>
+
+                        </div>
+
+
+                        <!-- Submit -->
+                        <button
+                            type="submit"
+                            class="login-button"
+                            id="submitBtn"
+                        >
+
+                            <span>Create account</span>
+
+                            <svg viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="2">
+
+                                <path d="M5 12H19"/>
+                                <path d="M13 6L19 12L13 18"/>
+
+                            </svg>
+
+                        </button>
+
+                        <p class="form-status" id="formStatus" role="status"></p>
+
+                    </form>
+
+
+                    <!-- Divider -->
+                    <div class="divider">
+                        <span>OR</span>
+                    </div>
+
+
+
+
+                    <!-- Sign in -->
+                    <p class="signup-text">
+
+                        Already have an account?
+
+                        <a href="index.html">Sign in</a>
+
+                    </p>
+
+
+                    <!-- Security -->
+                    <div class="security-note">
+
+                        <svg viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="1.8">
+
+                            <path d="M12 3L20 7V12C20 16.5 16.9 19.7 12 21C7.1 19.7 4 16.5 4 12V7L12 3Z"/>
+                            <path d="M9 12L11 14L15 10"/>
+
+                        </svg>
+
+                        <span>
+                            Your information is securely encrypted
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- ========== SUCCESS VIEW ========== -->
+                <div id="successView" class="success-panel" hidden>
+
+                    <div class="login-header">
+
+                        <div class="welcome-icon">
+                            <svg viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="1.8">
+                                <path d="M4 12.5L9.5 18L20 6.5"/>
+                            </svg>
+                        </div>
+
+                    </div>
+
+                    <h2 id="successTitle" tabindex="-1">Check your inbox</h2>
+
+                    <p>
+                        We sent a verification link to
+                        <strong id="successEmail"></strong>.
+                        Open it to finish creating your account.
+                    </p>
+
+                    <a href="index.html" class="login-button as-link">
+                        <span>Back to sign in</span>
+                    </a>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <!-- Footer -->
+    <footer>
+        © 2026 ClubHub · College Club Management System
+    </footer>
+
+</div>
+
+
+<script src="signup.js"></script>
+
+</body>
+</html>

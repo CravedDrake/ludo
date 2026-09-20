@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClubHub - College Club Management</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="login-page">
+    <div class="background">
+        <div class="glow glow-one"></div>
+    </div>
+
+    <div class="login-container">
+
+        <!-- LEFT BRANDING -->
+        <section class="brand-section">
+
+            <div class="brand-logo">
+
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.8">
+                        <path d="M12 3L20 7.5V12.5C20 17.2 16.8 20.7 12 22C7.2 20.7 4 17.2 4 12.5V7.5L12 3Z"/>
+                        <path d="M8 10.5L12 8L16 10.5V14.5L12 17L8 14.5V10.5Z"/>
+                    </svg>
+                </div>
+
+                <div>
+                    <h2>Club<span>Hub</span></h2>
+                    <p>Campus Community</p>
+                </div>
+
+            </div>
+
+            <div class="brand-content">
+
+                <p class="eyebrow">COLLEGE CLUB MANAGEMENT</p>
+
+                <h1>
+                    Connect.
+                    <br>
+                    <span>Collaborate.</span>
+                    <br>
+                    Create.
+                </h1>
+
+                <p class="brand-description">
+                    One place to discover clubs, manage events, connect with
+                    students, and build a stronger campus community.
+                </p>
+
+            </div>
+
+
+        </section>
+
+
+        <!-- LOGIN SECTION -->
+        <section class="login-section">
+
+            <div class="login-card">
+
+                <!-- Mobile Logo -->
+                <div class="mobile-logo">
+
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <path d="M12 3L20 7.5V12.5C20 17.2 16.8 20.7 12 22C7.2 20.7 4 17.2 4 12.5V7.5L12 3Z"/>
+                            <path d="M8 10.5L12 8L16 10.5V14.5L12 17L8 14.5V10.5Z"/>
+                        </svg>
+                    </div>
+
+                    <div>
+                        <h2>Club<span>Hub</span></h2>
+                    </div>
+
+                </div>
+
+
+                <!-- Login Header -->
+                <div class="login-header">
+
+                    <div class="welcome-icon">
+                        <svg viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.8">
+                            <path d="M20 21V19C20 16.8 18.2 15 16 15H8C5.8 15 4 16.8 4 19V21"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+
+                    <h2>Welcome back</h2>
+
+                    <p>
+                        Sign in to access your club dashboard
+                    </p>
+
+                </div>
+
+
+                <!-- FORM -->
+                <form id="loginForm">
+
+                    <!-- Email -->
+                    <div class="form-group">
+
+                        <label for="email">
+                            Email
+                        </label>
+
+                        <div class="input-wrapper">
+
+                            <svg class="input-icon"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="1.8">
+
+                                <rect x="3" y="5"
+                                      width="18"
+                                      height="14"
+                                      rx="2"/>
+
+                                <path d="M3 7L12 13L21 7"/>
+
+                            </svg>
+
+                            <input
+                                id="email"
+                                name="email"
+                                type="email"
+                                placeholder="Enter your email"
+                                required
+                            >
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Password -->
+                    <div class="form-group">
+
+                        <div class="label-row">
+
+                            <label for="password">
+                                Password
+                            </label>
+
+                            <button
+                                type="button"
+                                class="forgot-password"
+                                onclick="forgotPassword()"
+                            >
+                                Forgot password?
+                            </button>
+
+                        </div>
+
+                        <div class="input-wrapper">
+
+                            <svg class="input-icon"
+                                 viewBox="0 0 24 24"
+                                 fill="none"
+                                 stroke="currentColor"
+                                 stroke-width="1.8">
+
+                                <rect x="4" y="10"
+                                      width="16"
+                                      height="11"
+                                      rx="2"/>
+
+                                <path d="M8 10V7C8 4.8 9.8 3 12 3C14.2 3 16 4.8 16 7V10"/>
+
+                            </svg>
+
+                            <input
+                                id="password"
+                                name="password"
+                                type="password"
+                                placeholder="Enter your password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle"
+                                id="passwordToggle"
+                                onclick="togglePassword()"
+                                aria-label="Show password"
+                            >
+
+                                <!-- Eye -->
+                                <svg id="eyeIcon"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="1.8">
+
+                                    <path d="M2 12C3.3 9 7 5 12 5C17 5 20.7 9 22 12C20.7 15 17 19 12 19C7 19 3.3 15 2 12Z"/>
+
+                                    <circle cx="12" cy="12" r="3"/>
+
+                                </svg>
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Remember Me -->
+                    <div class="remember-row">
+
+                        <label class="remember">
+
+                            <input
+                                type="checkbox"
+                                id="rememberMe"
+                            >
+
+                            <span class="custom-checkbox"></span>
+
+                            Remember me
+
+                        </label>
+
+                    </div>
+
+
+                    <!-- Login Button -->
+                    <button
+                        type="submit"
+                        class="login-button"
+                    >
+
+                        <span>Sign in</span>
+
+                        <svg viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2">
+
+                            <path d="M5 12H19"/>
+                            <path d="M13 6L19 12L13 18"/>
+
+                        </svg>
+
+                    </button>
+
+                </form>
+
+
+                <!-- Divider -->
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+
+
+
+
+                <!-- Signup -->
+                <p class="signup-text">
+
+                    Don't have an account?
+
+                    <button
+                        type="button"
+                        
+                    >
+                        <a href="signup.html">Create an account</a>
+                    </button>
+
+                </p>
+
+
+                <!-- Security -->
+                <div class="security-note">
+
+                    <svg viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="1.8">
+
+                        <path d="M12 3L20 7V12C20 16.5 16.9 19.7 12 21C7.1 19.7 4 16.5 4 12V7L12 3Z"/>
+                        <path d="M9 12L11 14L15 10"/>
+
+                    </svg>
+
+                    <span>
+                        Your information is securely encrypted
+                    </span>
+
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <!-- Footer -->
+    <footer>
+        © 2026 ClubHub · College Club Management System
+    </footer>
+
+</div>
+
+
+<script src="script.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,490 @@
+/* =========================================================
+   ClubHub – Sign up page
+   Loads AFTER style.css and reuses its tokens and components
+   (.login-card, .form-group, .input-wrapper, .login-button…).
+   Only what the login page doesn't already have is defined here.
+========================================================= */
+
+[hidden] {
+    display: none !important;
+}
+
+
+/* =========================
+   CARD
+========================= */
+
+.login-card.signup-card {
+    max-width: 520px;
+}
+
+.signup-card .login-header {
+    margin-bottom: 28px;
+}
+
+.signup-card .form-group {
+    margin-bottom: 18px;
+}
+
+
+/* =========================
+   BRAND SIDE – PERKS
+========================= */
+
+.perks {
+    list-style: none;
+
+    max-width: 460px;
+
+    margin: 50px 0 0;
+    padding: 0;
+
+    display: grid;
+    gap: 22px;
+}
+
+.perk {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.perk-icon {
+    flex-shrink: 0;
+
+    width: 38px;
+    height: 38px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 11px;
+
+    background: rgba(139,92,246,0.12);
+    color: var(--accent-light);
+}
+
+.perk-icon svg {
+    width: 19px;
+    height: 19px;
+}
+
+.perk strong {
+    display: block;
+
+    margin-bottom: 3px;
+
+    color: white;
+
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.perk span {
+    display: block;
+
+    color: #858b9c;
+
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+
+/* =========================
+   FORM LAYOUT
+========================= */
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.form-row .form-group {
+    min-width: 0;
+}
+
+/* Inputs without a leading icon */
+.input-wrapper.no-icon input {
+    padding: 0 14px;
+}
+
+
+/* =========================
+   SELECT
+========================= */
+
+.input-wrapper select {
+    width: 100%;
+    height: 51px;
+
+    padding: 0 40px 0 14px;
+
+    border: 1px solid #292c36;
+    border-radius: 11px;
+
+    outline: none;
+
+    background: #0c0e13;
+
+    color: white;
+
+    font: inherit;
+    font-size: 13px;
+
+    appearance: none;
+    -webkit-appearance: none;
+
+    cursor: pointer;
+
+    transition: 0.2s ease;
+}
+
+.input-wrapper select:invalid {
+    color: #555b6b;
+}
+
+.input-wrapper select option {
+    background: #111319;
+    color: white;
+}
+
+.input-wrapper select option[value=""] {
+    color: #777d8e;
+}
+
+.input-wrapper select:focus {
+    border-color: rgba(139,92,246,0.7);
+
+    box-shadow:
+        0 0 0 3px rgba(139,92,246,0.1);
+}
+
+.select-chevron {
+    position: absolute;
+
+    right: 14px;
+    top: 50%;
+
+    width: 16px;
+    height: 16px;
+
+    transform: translateY(-50%);
+
+    color: #666c7c;
+
+    pointer-events: none;
+}
+
+
+/* =========================
+   VALIDATION
+========================= */
+
+.field-hint {
+    margin: 8px 0 0;
+
+    color: #8a90a0;
+
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.field-error {
+    display: none;
+
+    margin: 7px 0 0;
+
+    color: #f87171;
+
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.has-error > .field-error {
+    display: block;
+}
+
+.input-wrapper.invalid input,
+.input-wrapper.invalid select {
+    border-color: rgba(248,113,113,0.7);
+
+    box-shadow:
+        0 0 0 3px rgba(248,113,113,0.08);
+}
+
+
+/* =========================
+   PASSWORD STRENGTH
+========================= */
+
+.strength {
+    --strength-color: transparent;
+}
+
+.strength-bars {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+
+    margin-top: 10px;
+}
+
+.strength-bars span {
+    height: 4px;
+
+    border-radius: 99px;
+
+    background: #262a34;
+
+    transition: background 0.2s ease;
+}
+
+.strength[data-level="1"] { --strength-color: #f87171; }
+.strength[data-level="2"] { --strength-color: #fbbf24; }
+.strength[data-level="3"] { --strength-color: #a78bfa; }
+.strength[data-level="4"] { --strength-color: #34d399; }
+
+.strength[data-level="1"] .strength-bars span:nth-child(-n+1),
+.strength[data-level="2"] .strength-bars span:nth-child(-n+2),
+.strength[data-level="3"] .strength-bars span:nth-child(-n+3),
+.strength[data-level="4"] .strength-bars span:nth-child(-n+4) {
+    background: var(--strength-color);
+}
+
+.strength:not([data-level="0"]) .field-hint {
+    color: #c4c7d0;
+}
+
+
+/* =========================
+   TERMS CHECKBOX
+========================= */
+
+.terms-row {
+    margin: 4px 0 22px;
+}
+
+.terms {
+    position: relative;
+
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+
+    color: #8a90a0;
+
+    font-size: 12px;
+    line-height: 1.55;
+
+    cursor: pointer;
+}
+
+/* Visually hidden but still focusable by keyboard */
+.terms input {
+    position: absolute;
+
+    width: 16px;
+    height: 16px;
+
+    margin: 0;
+
+    opacity: 0;
+}
+
+.terms .custom-checkbox {
+    flex-shrink: 0;
+
+    margin-top: 2px;
+
+    border: 1px solid #414552;
+    border-radius: 4px;
+
+    transition: 0.2s ease;
+}
+
+.terms input:checked + .custom-checkbox {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.terms input:checked + .custom-checkbox::after {
+    content: "";
+
+    position: absolute;
+
+    width: 4px;
+    height: 8px;
+
+    left: 5px;
+    top: 2px;
+
+    border-right: 2px solid white;
+    border-bottom: 2px solid white;
+
+    transform: rotate(45deg);
+}
+
+.terms input:focus-visible + .custom-checkbox {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
+}
+
+.terms a {
+    color: var(--accent-light);
+
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.terms-row.has-error .custom-checkbox {
+    border-color: #f87171;
+}
+
+
+/* =========================
+   BUTTON STATES
+========================= */
+
+.login-button:disabled {
+    opacity: 0.75;
+
+    cursor: progress;
+
+    transform: none;
+    box-shadow: none;
+}
+
+.login-button.is-loading svg {
+    display: none;
+}
+
+.login-button.is-loading::after {
+    content: "";
+
+    width: 16px;
+    height: 16px;
+
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: white;
+    border-radius: 50%;
+
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.login-button.as-link {
+    text-decoration: none;
+}
+
+.form-status {
+    margin: 12px 0 0;
+
+    text-align: center;
+
+    color: #8a90a0;
+
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.form-status:empty {
+    display: none;
+}
+
+.form-status.is-error {
+    color: #f87171;
+}
+
+
+/* =========================
+   SIGN IN LINK
+========================= */
+
+.signup-text a {
+    margin-left: 5px;
+
+    color: var(--accent-light);
+
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.signup-text a:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+
+/* =========================
+   SUCCESS VIEW
+========================= */
+
+.success-panel {
+    text-align: center;
+}
+
+.success-panel h2 {
+    margin: 0 0 10px;
+
+    color: white;
+    font-size: 25px;
+}
+
+.success-panel h2:focus {
+    outline: none;
+}
+
+.success-panel p {
+    margin: 0 0 28px;
+
+    color: #9da3b4;
+
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.success-panel p strong {
+    color: white;
+    word-break: break-all;
+}
+
+
+/* =========================
+   FOCUS + MOTION
+========================= */
+
+.signup-card button:focus-visible,
+.signup-card a:focus-visible,
+.input-wrapper select:focus-visible {
+    outline: 2px solid var(--accent-light);
+    outline-offset: 2px;
+}
+
+.input-wrapper input:focus-visible {
+    outline: none; /* the input already has a focus ring via box-shadow */
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .login-button.is-loading::after {
+        animation-duration: 2s;
+    }
+}
+
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 500px) {
+
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+}
