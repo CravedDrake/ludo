@@ -294,6 +294,33 @@ body.is-full .live-dot::after { animation: none; opacity: 0; }
 
 .player-slot--empty .avatar__initial { display: none; }
 
+/* Lobby colours are NOT fixed — every seat (taken or open) flickers
+   through red, blue, green and yellow. Real colours are dealt randomly
+   when the host starts the game. Each seat is offset so they never
+   light up in sync. */
+.player-slot { animation: seatFlicker 2.4s steps(1, end) infinite; }
+.player-slot--filled { animation: seatIn 360ms cubic-bezier(.2, .9, .3, 1.1), seatFlicker 2.4s steps(1, end) infinite; }
+.player-slot--empty { border-color: rgba(var(--c-rgb), 0.55); }
+#player1-slot { animation-delay: 0s; }
+#player2-slot { animation-delay: -0.6s; }
+#player3-slot { animation-delay: -1.2s; }
+#player4-slot { animation-delay: -1.8s; }
+.player-slot--filled#player1-slot { animation-delay: 0s, 0s; }
+.player-slot--filled#player2-slot { animation-delay: 0s, -0.6s; }
+.player-slot--filled#player3-slot { animation-delay: 0s, -1.2s; }
+.player-slot--filled#player4-slot { animation-delay: 0s, -1.8s; }
+
+@keyframes seatFlicker {
+  0%   { --c: var(--red);    --c-rgb: var(--red-rgb); }
+  25%  { --c: var(--blue);   --c-rgb: var(--blue-rgb); }
+  50%  { --c: var(--green);  --c-rgb: var(--green-rgb); }
+  75%  { --c: var(--yellow); --c-rgb: var(--yellow-rgb); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-slot, .player-slot--filled { animation: none; }
+}
+
 @keyframes seatWait {
   0%, 100% { box-shadow: inset 0 0 0 1.5px rgba(var(--c-rgb), 0.45); }
   50%      { box-shadow: inset 0 0 0 1.5px rgba(var(--c-rgb), 0.9), 0 0 0 5px rgba(var(--c-rgb), 0.10); }
@@ -340,6 +367,10 @@ body.is-full .live-dot::after { animation: none; opacity: 0; }
 
 body.mode-2p #player2-slot,
 body.mode-2p #player3-slot { display: none; }
+body.mode-2p.pair-23 #player2-slot,
+body.mode-2p.pair-23 #player3-slot { display: grid; }
+body.mode-2p.pair-23 #player1-slot,
+body.mode-2p.pair-23 #player4-slot { display: none; }
 
 
 /* ================================================================
@@ -551,12 +582,22 @@ body.mode-2p #player3-slot { display: none; }
 
 body.mode-2p #panel-player2,
 body.mode-2p #panel-player3 { display: none; }
+body.mode-2p.pair-23 #panel-player2,
+body.mode-2p.pair-23 #panel-player3 { display: flex; }
+body.mode-2p.pair-23 #panel-player1,
+body.mode-2p.pair-23 #panel-player4 { display: none; }
 
 body.mode-2p .game-stage {
   grid-template-areas:
     "red    red"
     "board  board"
     "yellow yellow";
+}
+body.mode-2p.pair-23 .game-stage {
+  grid-template-areas:
+    "blue  blue"
+    "board board"
+    "green green";
 }
 
 
@@ -1593,6 +1634,12 @@ body.turn-yellow #ludo-board :is(.zone-yellow, .yellow-inner) { background-color
       ".     board yellow";
   }
 
+  body.mode-2p.pair-23 .game-stage {
+    grid-template-areas:
+      ".     board blue"
+      "green board .";
+  }
+
   .pp {
     width: min(100%, 268px);
     padding: 12px 14px;
@@ -1678,6 +1725,12 @@ body.turn-yellow #ludo-board :is(.zone-yellow, .yellow-inner) { background-color
       ".     board yellow";
   }
 
+  body.mode-2p.pair-23 .game-stage {
+    grid-template-areas:
+      ".     board blue"
+      "green board .";
+  }
+
   .pp { flex-direction: column; align-items: flex-start; width: min(100%, 190px); padding: 8px 10px; }
   #panel-player1, #panel-player3 { justify-self: end; }
   #panel-player2, #panel-player4 { justify-self: start; }
@@ -1685,3 +1738,6 @@ body.turn-yellow #ludo-board :is(.zone-yellow, .yellow-inner) { background-color
   #panel-player3, #panel-player4 { align-self: end; }
   .pp .dice-box { align-self: flex-end; }
 }
+
+/* Lobby avatars follow the seat's flickering colour (not their fixed class). */
+.player-slot .avatar { --c: inherit; --c-rgb: inherit; }

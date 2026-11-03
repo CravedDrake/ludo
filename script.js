@@ -166,6 +166,11 @@ createBtn.addEventListener("click", async () => {
     try {
         const code = await getUniqueCode();
 
+        // Seats are handed out in lobby order; the real colours are
+        // shuffled when the host starts the game (see room.js).
+        const hostSlot = "player1";
+        const playerId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random();
+
         await set(ref(db, "rooms/" + code), {
             code,
             status: "waiting",
@@ -173,16 +178,18 @@ createBtn.addEventListener("click", async () => {
             turnOrder: ["player1", "player2", "player3", "player4"],
             createdAt: Date.now(),
             players: {
-                player1: {
+                [hostSlot]: {
                     name,
-                    color: COLOR_MAP.player1,
+                    color: COLOR_MAP[hostSlot],
                     isHost: true,
+                    pid: playerId,
                     joinedAt: Date.now()
                 }
             }
         });
 
-        sessionStorage.setItem("playerSlot", "player1");
+        sessionStorage.setItem("playerSlot", hostSlot);
+        sessionStorage.setItem("playerId", playerId);
         sessionStorage.setItem("isHost", "true");
         sessionStorage.setItem("playerName", name);
 

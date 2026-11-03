@@ -505,13 +505,11 @@ function getCellEl(coord) {
     return document.getElementById(`c-${coord[0]}-${coord[1]}`);
 }
 
-/* `maxPlayers` determines which seats are handed out.
-   - Default (4, or unset): fills player2, then player3, then player4.
-   - 2-player rooms: skip straight to player4 — the second seat is
-     the corner DIAGONALLY OPPOSITE player1's red corner (top-left),
-     i.e. the yellow bottom-right corner, instead of the adjacent
-     blue top-right corner. player2/player3 are never assigned in
-     this mode, so their seats/UI simply stay empty/hidden. */
+/* Seats are handed out in lobby order. The lobby colours are only a
+   flicker — the REAL colours are shuffled when the host starts the
+   game (see shuffleColors / the Start Game handler).
+   - 2-player rooms: second seat is player4 (diagonal to player1).
+   - Otherwise: player2, then player3, then player4. */
 function getNextPlayerSlot(players = {}, maxPlayers = 4) {
     if (maxPlayers === 2) {
         if (!players.player4) return "player4";
@@ -521,6 +519,28 @@ function getNextPlayerSlot(players = {}, maxPlayers = 4) {
     if (!players.player3) return "player3";
     if (!players.player4) return "player4";
     return null;
+}
+
+const OPPOSITE_SLOT = { player1: "player4", player4: "player1", player2: "player3", player3: "player2" };
+
+function shuffleArray(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+}
+
+/* Picks a random colour (board corner) for each lobby player.
+   2-player rooms get diagonally opposite corners. */
+function pickRandomSlots(count, maxPlayers) {
+    const all = ["player1", "player2", "player3", "player4"];
+    if (maxPlayers === 2 && count === 2) {
+        const first = all[Math.floor(Math.random() * 4)];
+        return shuffleArray([first, OPPOSITE_SLOT[first]]);
+    }
+    return shuffleArray(all).slice(0, count);
 }
 
 /* Skips any slot already listed in `finished` (players who have
@@ -809,11 +829,15 @@ async function joinRoom() {
             return;
         }
 
+        const playerId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random();
+        sessionStorage.setItem("playerId", playerId);
+
         await update(roomRef, {
             [`players/${slot}`]: {
                 name,
                 color: COLOR_MAP[slot],
                 isHost: false,
+                pid: playerId,
                 joinedAt: Date.now()
             }
         });
@@ -847,13 +871,21 @@ startGameBtn?.addEventListener("click", async () => {
     const room = latestRoom;
     if (!room) return;
 
-    const players   = room.players || {};
-    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
-    const active    = turnOrder.filter(s => players[s]);
+    const lobbyPlayers = room.players || {};
+    const turnOrder    = room.turnOrder || ["player1", "player2", "player3", "player4"];
+    const lobbyActive  = turnOrder.filter(s => lobbyPlayers[s]);
 
+    // Random colours: re-seat every player onto a random board corner.
+    const targets = pickRandomSlots(lobbyActive.length, room.maxPlayers);
+    const players = {};
+    lobbyActive.forEach((oldSlot, i) => {
+        players[targets[i]] = { ...lobbyPlayers[oldSlot], color: COLOR_MAP[targets[i]] };
+    });
+    const active    = turnOrder.filter(s => players[s]);
     const firstTurn = active[Math.floor(Math.random() * active.length)];
 
     await update(roomRef, {
+        players,
         status:                "playing",
         "game/currentTurn":    firstTurn,
         "game/diceValue":      0,
@@ -1455,6 +1487,14 @@ onValue(roomRef, (snap) => {
 
     const room    = snap.val();
     const players = room.players || {};
+
+    // Colours are shuffled at game start, so my seat may have changed:
+    // find myself again by my player id.
+    const myPid = sessionStorage.getItem("playerId");
+    if (myPid) {
+        const found = Object.keys(players).find(s => players[s] && players[s].pid === myPid);
+        if (found && found !== getMySlot()) sessionStorage.setItem("playerSlot", found);
+    }
     const mySlot  = getMySlot();
 
     latestRoom    = room;
@@ -1491,6 +1531,8 @@ onValue(roomRef, (snap) => {
     // seats everywhere at once.
     mode2p = room.maxPlayers === 2;
     document.body.classList.toggle("mode-2p", mode2p);
+    // which diagonal pair is in play (red/yellow = 14, blue/green = 23)
+    document.body.classList.toggle("pair-23", mode2p && !!(players.player2 || players.player3));
 
     announcePlayerChanges(players);
     updatePlayerSlots(players);
