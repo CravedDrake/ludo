@@ -10,6 +10,7 @@ import {
     limitToLast
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
 import { showToast, copyText } from "./ui.js";
+import { getCheatDice } from "./dev.js";
 
 /* =========================================================
    ROOM INIT — read code from URL
@@ -1038,7 +1039,7 @@ async function handleDiceClick(slot) {
     if (game.gameOver)                        return;
     if (game.rolling && game.rolling.slot)    return; // a roll is already in flight
 
-    const dice = Math.floor(Math.random() * 6) + 1;
+    const dice = getCheatDice() ?? (Math.floor(Math.random() * 6) + 1);
 
     try {
         await update(roomRef, {
