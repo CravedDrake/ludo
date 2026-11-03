@@ -4,6 +4,7 @@ import {
     set,
     get
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+import { showToast, copyText } from "./ui.js";
 
 /* =========================================================
    ELEMENTS
@@ -32,6 +33,36 @@ const COLOR_MAP = { player1: "red", player2: "blue", player3: "green", player4: 
 let selectedCount = null;
 
 /* =========================================================
+   CREATE / JOIN TABS  (UI only)
+========================================================= */
+
+const tabs  = [document.getElementById("tab-create"), document.getElementById("tab-join")];
+const panes = [document.getElementById("pane-create"), document.getElementById("pane-join")];
+
+function selectTab(index, focus) {
+    tabs.forEach((tab, i) => {
+        const on = i === index;
+        tab.setAttribute("aria-selected", String(on));
+        tab.tabIndex = on ? 0 : -1;
+        panes[i].hidden = !on;
+    });
+    if (focus) tabs[index].focus();
+}
+
+tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => selectTab(i));
+    tab.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            e.preventDefault();
+            selectTab((i + 1) % tabs.length, true);
+        }
+    });
+});
+
+// Landing on /index.html#join (or arriving with a ?code=) opens the join tab.
+if (location.hash === "#join") selectTab(1);
+
+/* =========================================================
    PLAYER COUNT SELECTION
 ========================================================= */
 
@@ -48,6 +79,33 @@ countBtns.forEach((btn) => {
     });
 });
 
+/* Small helpers for the loading state of the primary buttons */
+function setBusy(btn, busy, busyLabel) {
+    const label = btn.querySelector(".btn__label");
+    if (busy) {
+        btn.dataset.idleLabel = label.textContent;
+        label.textContent = busyLabel;
+        btn.disabled = true;
+        btn.setAttribute("aria-busy", "true");
+        const spin = document.createElement("span");
+        spin.className = "spinner";
+        spin.setAttribute("aria-hidden", "true");
+        btn.insertBefore(spin, btn.firstChild);
+        btn.querySelector("svg")?.setAttribute("hidden", "");
+    } else {
+        label.textContent = btn.dataset.idleLabel || label.textContent;
+        btn.disabled = false;
+        btn.removeAttribute("aria-busy");
+        btn.querySelector(".spinner")?.remove();
+        btn.querySelector("svg")?.removeAttribute("hidden");
+    }
+}
+
+nameInput.addEventListener("input", () => {
+    nameError.textContent = "";
+    nameInput.removeAttribute("aria-invalid");
+});
+
 /* =========================================================
    SHARED HELPERS
 ========================================================= */
@@ -55,11 +113,13 @@ countBtns.forEach((btn) => {
 function validateName() {
     const name = nameInput.value.trim();
     if (!name) {
-        nameError.textContent = "Please enter your name.";
+        nameError.textContent = "Enter your name so friends know who you are.";
+        nameInput.setAttribute("aria-invalid", "true");
         nameInput.focus();
         return null;
     }
     nameError.textContent = "";
+    nameInput.removeAttribute("aria-invalid");
     return name;
 }
 
@@ -96,14 +156,12 @@ createBtn.addEventListener("click", async () => {
     if (!name) return;
 
     if (!selectedCount) {
-        countError.textContent = "Please choose a number of players.";
+        countError.textContent = "Choose how many players will join.";
         return;
     }
     countError.textContent = "";
 
-    createBtn.disabled = true;
-    const originalLabel = createBtn.innerHTML;
-    createBtn.innerHTML = `<span class="btn-create__icon" aria-hidden="true">🎲</span> Creating…`;
+    setBusy(createBtn, true, "Creating room…");
 
     try {
         const code = await getUniqueCode();
@@ -131,9 +189,8 @@ createBtn.addEventListener("click", async () => {
         showRoomCreated(code);
     } catch (err) {
         console.error("Failed to create room:", err);
-        countError.textContent = "Something went wrong creating the room. Please try again.";
-        createBtn.disabled = false;
-        createBtn.innerHTML = originalLabel;
+        countError.textContent = "Couldn't create the room. Check your connection and try again.";
+        setBusy(createBtn, false);
     }
 });
 
@@ -148,6 +205,7 @@ function showRoomCreated(code) {
     roomLinkInput.value = url;
     copyHint.textContent = "";
 
+    roomPanel.closest(".panel")?.classList.add("is-created");
     roomPanel.hidden = false;
     roomPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
@@ -162,13 +220,8 @@ function showRoomCreated(code) {
 ========================================================= */
 
 copyBtn.addEventListener("click", async () => {
-    try {
-        await navigator.clipboard.writeText(roomLinkInput.value);
-    } catch {
-        roomLinkInput.select();
-        document.execCommand("copy");
-    }
-    copyHint.textContent = "Link copied!";
+    await copyText(roomLinkInput.value);
+    copyHint.textContent = "Invite link copied";
     setTimeout(() => { copyHint.textContent = ""; }, 2500);
 });
 
@@ -209,7 +262,44 @@ joinCodeInput.addEventListener("input", (e) => {
         input.setSelectionRange(newPos, newPos);
     }
 
+    clearJoinError();
+});
+
+function setJoinError(message) {
+    joinError.textContent = message;
+    joinCodeInput.setAttribute("aria-invalid", "true");
+}
+
+function clearJoinError() {
     joinError.textContent = "";
+    joinCodeInput.removeAttribute("aria-invalid");
+}
+
+/* Pulls a 6-character code out of whatever was pasted: a bare code,
+   or a full invite link ending in ?code=XXXXXX. */
+function extractCode(text) {
+    const fromLink = text.match(/[?&]code=([A-Za-z0-9]+)/);
+    const raw = fromLink ? fromLink[1] : text;
+    return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+
+/* "Paste" button — one tap on mobile instead of long-press → paste. */
+document.getElementById("paste-btn")?.addEventListener("click", async () => {
+    try {
+        const text = await navigator.clipboard.readText();
+        const code = extractCode(text || "");
+        if (!code) {
+            setJoinError("Your clipboard doesn't have a room code.");
+            return;
+        }
+        joinCodeInput.value = code;
+        clearJoinError();
+        joinCodeInput.focus();
+    } catch {
+        // Clipboard read blocked (permissions / insecure context) — fall back to manual paste.
+        joinCodeInput.focus();
+        showToast("Press and hold in the box to paste", "default");
+    }
 });
 
 /* NEW: if someone pastes the whole invite link (not just the code),
@@ -221,7 +311,7 @@ joinCodeInput.addEventListener("paste", (e) => {
     if (match) {
         e.preventDefault();
         joinCodeInput.value = match[1].toUpperCase().slice(0, 6);
-        joinError.textContent = "";
+        clearJoinError();
     }
     // otherwise let the normal paste + "input" handler above clean it up
 });
@@ -242,45 +332,53 @@ joinBtn.addEventListener("click", joinRoom);
 async function joinRoom() {
     const code = joinCodeInput.value.trim().toUpperCase();
     if (!code) {
-        joinError.textContent = "Please enter a room code.";
+        setJoinError("Enter the 6-character room code.");
         joinCodeInput.focus();
         return;
     }
-    joinError.textContent = "";
+    clearJoinError();
 
-    joinBtn.disabled = true;
-    const originalLabel = joinBtn.textContent;
-    joinBtn.textContent = "Checking…";
+    setBusy(joinBtn, true, "Checking room…");
+
+    let navigating = false;
 
     try {
         const snap = await get(ref(db, "rooms/" + code));
 
         if (!snap.exists()) {
-            joinError.textContent = "No room found with that code.";
+            setJoinError("No room found with that code. Check it and try again.");
             return;
         }
 
         const room = snap.val();
 
         if (room.status === "playing") {
-            joinError.textContent = "That game has already started.";
+            setJoinError("That game has already started.");
             return;
         }
 
         const filled = Object.keys(room.players || {}).length;
         if (room.maxPlayers && filled >= room.maxPlayers) {
-            joinError.textContent = "That room is full.";
+            setJoinError("That room is full.");
             return;
         }
 
         // No name collected here anymore — room.html's join-card
         // prompts for the name and completes the join itself.
+        navigating = true;
         window.location.href = "room.html?code=" + code;
     } catch (err) {
         console.error("Failed to look up room:", err);
-        joinError.textContent = "Something went wrong. Please try again.";
+        setJoinError("Couldn't reach the room. Check your connection and try again.");
     } finally {
-        joinBtn.disabled = false;
-        joinBtn.textContent = originalLabel;
+        // keep the spinner up while the browser navigates away
+        if (!navigating) setBusy(joinBtn, false);
     }
 }
+/* Coming back via the browser's back button restores the page from cache with
+   the buttons still in their loading state — reset them. */
+window.addEventListener("pageshow", (e) => {
+    if (!e.persisted) return;
+    if (joinBtn.disabled) setBusy(joinBtn, false);
+    if (createBtn.disabled && roomPanel.hidden) setBusy(createBtn, false);
+});

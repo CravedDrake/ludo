@@ -2,204 +2,313 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ludo — Play with Friends</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#080D18" />
+  <title>Ludo — Play with friends</title>
+  <meta name="description" content="Create a room, share the code and play Ludo with friends in real time. No sign-up needed." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231B263B'/%3E%3Ccircle cx='10' cy='10' r='3.4' fill='%23FF5263'/%3E%3Ccircle cx='22' cy='10' r='3.4' fill='%233B82F6'/%3E%3Ccircle cx='10' cy='22' r='3.4' fill='%2322C55E'/%3E%3Ccircle cx='22' cy='22' r='3.4' fill='%23FBBF24'/%3E%3C/svg%3E" />
 
-  <!--
-    ╔══════════════════════════════════════════════════════╗
-    ║  Ludo Multiplayer — Home Page                        ║
-    ║  Step 1: UI + Create/Join (Firebase-backed)          ║
-    ╚══════════════════════════════════════════════════════╝
-  -->
-
-  <!-- Google Fonts: Baloo 2 (display) + DM Sans (body) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
-    rel="stylesheet"
-  />
-
+  <link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="base.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body class="home">
 
-  <!-- ░░░ Decorative background grid (pure CSS atmosphere) ░░░ -->
-  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="home__glow" aria-hidden="true"></div>
 
-  <!-- ░░░ Page wrapper ░░░ -->
-  <main class="page">
+  <header class="topbar">
+    <a class="brand" href="index.html" aria-label="Ludo home">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">Ludo</span>
+    </a>
+  </header>
 
-    <!-- ╔═══════════════════════════════╗ -->
-    <!-- ║  HERO / LOGO SECTION          ║ -->
-    <!-- ╚═══════════════════════════════╝ -->
-    <header class="hero">
+  <main class="home__main">
 
-      <!-- Animated spinning Ludo token (CSS only) — the signature element -->
-      <div class="ludo-token" aria-hidden="true">
-        <div class="ludo-token__body">
-          <div class="ludo-token__dome"></div>
+    <!-- ───────── Left: pitch + create/join ───────── -->
+    <div class="home__lead">
+
+      <div class="pitch">
+        <h1 class="pitch__title">Roll, race, and send your friends home.</h1>
+        <p class="pitch__text">Create a room, share the code, and play Ludo together on any device. No sign-up needed.</p>
+      </div>
+
+      <section class="panel" aria-label="Start playing">
+
+        <div class="tabs" role="tablist" aria-label="Create or join a room">
+          <button class="tabs__tab" id="tab-create" role="tab" type="button" aria-selected="true" aria-controls="pane-create">Create room</button>
+          <button class="tabs__tab" id="tab-join" role="tab" type="button" aria-selected="false" aria-controls="pane-join" tabindex="-1">Join room</button>
         </div>
-      </div>
 
-      <h1 class="hero__title">LUDO</h1>
-      <p class="hero__tagline">Grab your friends. Roll the dice.</p>
+        <!-- ───── Create ───── -->
+        <div class="pane" id="pane-create" role="tabpanel" aria-labelledby="tab-create">
 
-    </header>
+          <div class="field">
+            <label class="field__label" for="player-name">Your name</label>
+            <input
+              id="player-name"
+              class="field__input"
+              type="text"
+              placeholder="Name or nickname"
+              maxlength="20"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span class="field__error" id="name-error" role="alert"></span>
+          </div>
 
-    <!-- ╔═══════════════════════════════╗ -->
-    <!-- ║  GAME SETUP CARD              ║ -->
-    <!-- ╚═══════════════════════════════╝ -->
-    <section class="card" role="region" aria-label="Game setup">
+          <div class="field">
+            <span class="field__label" id="count-label">Players</span>
 
-      <!-- ── Name input (shared by Create + Join) ── -->
-      <div class="field">
-        <label class="field__label" for="player-name">Your name</label>
-        <input
-          id="player-name"
-          class="field__input"
-          type="text"
-          placeholder="Input your name or nickname"
-          maxlength="20"
-          autocomplete="off"
-          spellcheck="false"
-        />
-        <span class="field__error" id="name-error" role="alert"></span>
-      </div>
+            <div class="count-group" role="group" aria-labelledby="count-label">
 
-      <!-- ── Player count ── -->
-      <div class="field">
-        <span class="field__label" id="count-label">Number of players</span>
+              <!-- 2 players play Red vs Yellow (opposite corners) -->
+              <button class="count-btn" data-count="2" aria-pressed="false" type="button">
+                <span class="count-btn__pips" aria-hidden="true">
+                  <span class="pip pip--red"></span>
+                  <span class="pip pip--yellow"></span>
+                </span>
+                <span class="count-btn__number">2</span>
+                <span class="count-btn__label">players</span>
+              </button>
 
-        <div class="count-group" role="group" aria-labelledby="count-label">
+              <button class="count-btn" data-count="3" aria-pressed="false" type="button">
+                <span class="count-btn__pips" aria-hidden="true">
+                  <span class="pip pip--red"></span>
+                  <span class="pip pip--blue"></span>
+                  <span class="pip pip--green"></span>
+                </span>
+                <span class="count-btn__number">3</span>
+                <span class="count-btn__label">players</span>
+              </button>
 
-          <!-- 2 players — red + blue -->
-          <button
-            class="count-btn"
-            data-count="2"
-            aria-pressed="false"
-            type="button"
-          >
-            <span class="count-btn__pips">
-              <span class="pip pip--red"></span>
-              <span class="pip pip--blue"></span>
-            </span>
-            <span class="count-btn__number">2</span>
-            <span class="count-btn__label">Players</span>
-          </button>
+              <button class="count-btn" data-count="4" aria-pressed="false" type="button">
+                <span class="count-btn__pips" aria-hidden="true">
+                  <span class="pip pip--red"></span>
+                  <span class="pip pip--blue"></span>
+                  <span class="pip pip--green"></span>
+                  <span class="pip pip--yellow"></span>
+                </span>
+                <span class="count-btn__number">4</span>
+                <span class="count-btn__label">players</span>
+              </button>
 
-          <!-- 3 players — red + blue + green -->
-          <button
-            class="count-btn"
-            data-count="3"
-            aria-pressed="false"
-            type="button"
-          >
-            <span class="count-btn__pips">
-              <span class="pip pip--red"></span>
-              <span class="pip pip--blue"></span>
-              <span class="pip pip--green"></span>
-            </span>
-            <span class="count-btn__number">3</span>
-            <span class="count-btn__label">Players</span>
-          </button>
+            </div>
 
-          <!-- 4 players — all colors -->
-          <button
-            class="count-btn"
-            data-count="4"
-            aria-pressed="false"
-            type="button"
-          >
-            <span class="count-btn__pips count-btn__pips--four">
-              <span class="pip pip--red"></span>
-              <span class="pip pip--blue"></span>
-              <span class="pip pip--green"></span>
-              <span class="pip pip--yellow"></span>
-            </span>
-            <span class="count-btn__number">4</span>
-            <span class="count-btn__label">Players</span>
+            <span class="field__error" id="count-error" role="alert"></span>
+          </div>
+
+          <button class="btn btn--primary btn--block btn--lg" id="create-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="btn__label">Create room</span>
           </button>
 
         </div>
 
-        <span class="field__error" id="count-error" role="alert"></span>
-      </div>
+        <!-- ───── Join ───── -->
+        <div class="pane" id="pane-join" role="tabpanel" aria-labelledby="tab-join" hidden>
 
-      <!-- ── Create Game button ── -->
-      <button class="btn-create" id="create-btn" type="button">
-        <span class="btn-create__icon" aria-hidden="true">🎲</span>
-        Create Game
-      </button>
+          <div class="field">
+            <label class="field__label" for="join-code">Room code</label>
+            <div class="code-input">
+              <input
+                id="join-code"
+                class="field__input code-input__field"
+                type="text"
+                placeholder="AB12CD"
+                maxlength="6"
+                autocomplete="off"
+                spellcheck="false"
+                autocapitalize="characters"
+                inputmode="text"
+                aria-describedby="join-error"
+              />
+              <button class="btn btn--secondary code-input__paste" id="paste-btn" type="button" aria-label="Paste room code or invite link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1.5"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>
+                Paste
+              </button>
+            </div>
+            <span class="field__error" id="join-error" role="alert"></span>
+            <p class="field__hint">Ask the host for the 6-character code, or paste their invite link. You'll choose your name in the lobby.</p>
+          </div>
 
-      <!-- ── Divider ── -->
-      <div class="divider" role="separator">
-        <span class="divider__line"></span>
-        <span class="divider__text">OR</span>
-        <span class="divider__line"></span>
-      </div>
-
-      <!-- ── Join with code ── -->
-      <div class="field field--join">
-        <label class="field__label" for="join-code">Join with a code</label>
-        <div class="join-row">
-          <input
-            id="join-code"
-            class="field__input join-row__input"
-            type="text"
-            placeholder="e.g. AB12CD"
-            maxlength="6"
-            autocomplete="off"
-            spellcheck="false"
-            autocapitalize="characters"
-            inputmode="text"
-          />
-          <button class="btn-join" id="join-btn" type="button">
-            Join
+          <button class="btn btn--primary btn--block btn--lg" id="join-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+            <span class="btn__label">Join room</span>
           </button>
+
         </div>
-        <span class="field__error" id="join-error" role="alert"></span>
+
+        <!-- ───── Room created ───── -->
+        <section class="created" id="room-panel" aria-live="polite" aria-label="Room created" hidden>
+          <p class="created__title">Room ready</p>
+          <div class="room-code" id="room-code-display" aria-label="Room code"></div>
+
+          <div class="link-row">
+            <input class="link-row__input" id="room-link-input" type="text" readonly aria-label="Shareable invite link" />
+            <button class="btn btn--secondary btn--sm" id="copy-btn" type="button">Copy link</button>
+          </div>
+
+          <p class="created__hint" id="copy-hint"></p>
+          <p class="created__opening"><span class="spinner" aria-hidden="true"></span> Opening your lobby</p>
+        </section>
+
+      </section>
+
+    </div>
+
+    <!-- ───────── Right: the board, playing itself ───────── -->
+    <div class="home__art" aria-hidden="true">
+      <div class="art">
+        <svg class="hero-board" viewBox="0 0 320 320" role="img" aria-label="A Ludo board with tokens moving around the track" xmlns="http://www.w3.org/2000/svg">
+<rect class="hb-frame" x="1" y="1" width="318" height="318" rx="26"/>
+<rect class="hb-zone hb-red" x="10" y="10" width="120" height="120" rx="14"/>
+<rect class="hb-plate hb-red-line" x="36.0" y="36.0" width="68.0" height="68.0" rx="9"/>
+<circle class="hb-well hb-red-line" cx="60.0" cy="60.0" r="6.6"/>
+<circle class="hb-token hb-t-red" cx="60.0" cy="60.0" r="5.2"/>
+<circle class="hb-shine" cx="58.3" cy="58.1" r="1.5"/>
+<circle class="hb-well hb-red-line" cx="80.0" cy="60.0" r="6.6"/>
+<circle class="hb-token hb-t-red" cx="80.0" cy="60.0" r="5.2"/>
+<circle class="hb-shine" cx="78.3" cy="58.1" r="1.5"/>
+<circle class="hb-well hb-red-line" cx="60.0" cy="80.0" r="6.6"/>
+<circle class="hb-token hb-t-red" cx="60.0" cy="80.0" r="5.2"/>
+<circle class="hb-shine" cx="58.3" cy="78.1" r="1.5"/>
+<circle class="hb-well hb-red-line" cx="80.0" cy="80.0" r="6.6"/>
+<rect class="hb-zone hb-blue" x="190" y="10" width="120" height="120" rx="14"/>
+<rect class="hb-plate hb-blue-line" x="216.0" y="36.0" width="68.0" height="68.0" rx="9"/>
+<circle class="hb-well hb-blue-line" cx="240.0" cy="60.0" r="6.6"/>
+<circle class="hb-token hb-t-blue" cx="240.0" cy="60.0" r="5.2"/>
+<circle class="hb-shine" cx="238.3" cy="58.1" r="1.5"/>
+<circle class="hb-well hb-blue-line" cx="260.0" cy="60.0" r="6.6"/>
+<circle class="hb-token hb-t-blue" cx="260.0" cy="60.0" r="5.2"/>
+<circle class="hb-shine" cx="258.3" cy="58.1" r="1.5"/>
+<circle class="hb-well hb-blue-line" cx="240.0" cy="80.0" r="6.6"/>
+<circle class="hb-token hb-t-blue" cx="240.0" cy="80.0" r="5.2"/>
+<circle class="hb-shine" cx="238.3" cy="78.1" r="1.5"/>
+<circle class="hb-well hb-blue-line" cx="260.0" cy="80.0" r="6.6"/>
+<circle class="hb-token hb-t-blue" cx="260.0" cy="80.0" r="5.2"/>
+<circle class="hb-shine" cx="258.3" cy="78.1" r="1.5"/>
+<rect class="hb-zone hb-green" x="10" y="190" width="120" height="120" rx="14"/>
+<rect class="hb-plate hb-green-line" x="36.0" y="216.0" width="68.0" height="68.0" rx="9"/>
+<circle class="hb-well hb-green-line" cx="60.0" cy="240.0" r="6.6"/>
+<circle class="hb-token hb-t-green" cx="60.0" cy="240.0" r="5.2"/>
+<circle class="hb-shine" cx="58.3" cy="238.1" r="1.5"/>
+<circle class="hb-well hb-green-line" cx="80.0" cy="240.0" r="6.6"/>
+<circle class="hb-token hb-t-green" cx="80.0" cy="240.0" r="5.2"/>
+<circle class="hb-shine" cx="78.3" cy="238.1" r="1.5"/>
+<circle class="hb-well hb-green-line" cx="60.0" cy="260.0" r="6.6"/>
+<circle class="hb-token hb-t-green" cx="60.0" cy="260.0" r="5.2"/>
+<circle class="hb-shine" cx="58.3" cy="258.1" r="1.5"/>
+<circle class="hb-well hb-green-line" cx="80.0" cy="260.0" r="6.6"/>
+<circle class="hb-token hb-t-green" cx="80.0" cy="260.0" r="5.2"/>
+<circle class="hb-shine" cx="78.3" cy="258.1" r="1.5"/>
+<rect class="hb-zone hb-yellow" x="190" y="190" width="120" height="120" rx="14"/>
+<rect class="hb-plate hb-yellow-line" x="216.0" y="216.0" width="68.0" height="68.0" rx="9"/>
+<circle class="hb-well hb-yellow-line" cx="240.0" cy="240.0" r="6.6"/>
+<circle class="hb-token hb-t-yellow" cx="240.0" cy="240.0" r="5.2"/>
+<circle class="hb-shine" cx="238.3" cy="238.1" r="1.5"/>
+<circle class="hb-well hb-yellow-line" cx="260.0" cy="240.0" r="6.6"/>
+<circle class="hb-token hb-t-yellow" cx="260.0" cy="240.0" r="5.2"/>
+<circle class="hb-shine" cx="258.3" cy="238.1" r="1.5"/>
+<circle class="hb-well hb-yellow-line" cx="240.0" cy="260.0" r="6.6"/>
+<circle class="hb-token hb-t-yellow" cx="240.0" cy="260.0" r="5.2"/>
+<circle class="hb-shine" cx="238.3" cy="258.1" r="1.5"/>
+<circle class="hb-well hb-yellow-line" cx="260.0" cy="260.0" r="6.6"/>
+<rect class="hb-tile" x="131" y="11" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="151" y="11" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="11" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="31" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="151" y="31" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="171" y="31" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="51" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="151" y="51" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="51" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="71" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="151" y="71" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="71" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="91" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="151" y="91" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="91" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="111" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-blue-solid" x="151" y="111" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="111" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="11" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="31" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="51" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="71" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="91" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="111" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="191" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="211" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="231" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="251" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="271" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="291" y="131" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="11" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="31" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="51" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="71" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="91" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-red-solid" x="111" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="191" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="211" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="231" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="251" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="271" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="291" y="151" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="11" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="31" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="51" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="71" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="91" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="111" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="191" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="211" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="231" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="251" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-yellow-solid" x="271" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="291" y="171" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="191" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="151" y="191" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="191" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="211" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="151" y="211" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="211" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="231" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="151" y="231" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="231" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="251" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="151" y="251" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="251" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="131" y="271" width="18" height="18" rx="4"/>
+<rect class="hb-lane hb-green-solid" x="151" y="271" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="271" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="131" y="291" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="151" y="291" width="18" height="18" rx="4"/>
+<rect class="hb-tile" x="171" y="291" width="18" height="18" rx="4"/>
+<polygon class="hb-blue-solid" points="130,130 190,130 160.0,160.0"/>
+<polygon class="hb-yellow-solid" points="190,130 190,190 160.0,160.0"/>
+<polygon class="hb-green-solid" points="190,190 130,190 160.0,160.0"/>
+<polygon class="hb-red-solid" points="130,190 130,130 160.0,160.0"/>
+<circle class="hb-hub" cx="160.0" cy="160.0" r="7"/>
+<g class="hb-runners">
+<g class="hb-runner"><circle class="hb-token hb-t-red" r="6.2"/><circle class="hb-shine" cx="-2" cy="-2.2" r="1.7"/><animateMotion dur="24s" begin="0s" repeatCount="indefinite" path="M40,140 L60,140 L80,140 L100,140 L120,140 L140,120 L140,100 L140,80 L140,60 L140,40 L140,20 L160,20 L180,20 L180,40 L180,60 L180,80 L180,100 L180,120 L200,140 L220,140 L240,140 L260,140 L280,140 L300,140 L300,160 L300,180 L280,180 L260,180 L240,180 L220,180 L200,180 L180,200 L180,220 L180,240 L180,260 L180,280 L180,300 L160,300 L140,300 L140,280 L140,260 L140,240 L140,220 L140,200 L120,180 L100,180 L80,180 L60,180 L40,180 L20,180 L20,160 L20,140 Z"/></g>
+<g class="hb-runner"><circle class="hb-token hb-t-yellow" r="6.2"/><circle class="hb-shine" cx="-2" cy="-2.2" r="1.7"/><animateMotion dur="24s" begin="-12s" repeatCount="indefinite" path="M40,140 L60,140 L80,140 L100,140 L120,140 L140,120 L140,100 L140,80 L140,60 L140,40 L140,20 L160,20 L180,20 L180,40 L180,60 L180,80 L180,100 L180,120 L200,140 L220,140 L240,140 L260,140 L280,140 L300,140 L300,160 L300,180 L280,180 L260,180 L240,180 L220,180 L200,180 L180,200 L180,220 L180,240 L180,260 L180,280 L180,300 L160,300 L140,300 L140,280 L140,260 L140,240 L140,220 L140,200 L120,180 L100,180 L80,180 L60,180 L40,180 L20,180 L20,160 L20,140 Z"/></g>
+<g class="hb-runner"><circle class="hb-token hb-t-blue" r="6.2"/><circle class="hb-shine" cx="-2" cy="-2.2" r="1.7"/><animateMotion dur="24s" begin="-6s" repeatCount="indefinite" path="M40,140 L60,140 L80,140 L100,140 L120,140 L140,120 L140,100 L140,80 L140,60 L140,40 L140,20 L160,20 L180,20 L180,40 L180,60 L180,80 L180,100 L180,120 L200,140 L220,140 L240,140 L260,140 L280,140 L300,140 L300,160 L300,180 L280,180 L260,180 L240,180 L220,180 L200,180 L180,200 L180,220 L180,240 L180,260 L180,280 L180,300 L160,300 L140,300 L140,280 L140,260 L140,240 L140,220 L140,200 L120,180 L100,180 L80,180 L60,180 L40,180 L20,180 L20,160 L20,140 Z"/></g>
+<g class="hb-runner"><circle class="hb-token hb-t-green" r="6.2"/><circle class="hb-shine" cx="-2" cy="-2.2" r="1.7"/><animateMotion dur="24s" begin="-18s" repeatCount="indefinite" path="M40,140 L60,140 L80,140 L100,140 L120,140 L140,120 L140,100 L140,80 L140,60 L140,40 L140,20 L160,20 L180,20 L180,40 L180,60 L180,80 L180,100 L180,120 L200,140 L220,140 L240,140 L260,140 L280,140 L300,140 L300,160 L300,180 L280,180 L260,180 L240,180 L220,180 L200,180 L180,200 L180,220 L180,240 L180,260 L180,280 L180,300 L160,300 L140,300 L140,280 L140,260 L140,240 L140,220 L140,200 L120,180 L100,180 L80,180 L60,180 L40,180 L20,180 L20,160 L20,140 Z"/></g>
+</g>
+</svg>
+        <div class="art__die">
+          <span class="die-pip"></span><span class="die-pip"></span><span class="die-pip"></span>
+          <span class="die-pip"></span><span class="die-pip"></span><span class="die-pip"></span>
+        </div>
       </div>
-
-    </section>
-
-    <!-- ╔═══════════════════════════════╗ -->
-    <!-- ║  ROOM OUTPUT (hidden at first)║ -->
-    <!-- ╚═══════════════════════════════╝ -->
-    <section
-      class="room-panel"
-      id="room-panel"
-      aria-live="polite"
-      aria-label="Room created"
-      hidden
-    >
-      <p class="room-panel__eyebrow">Room created — share with friends</p>
-
-      <!-- Large room code display -->
-      <div class="room-code" id="room-code-display" aria-label="Room code"></div>
-
-      <!-- Copyable link row -->
-      <div class="link-row">
-        <input
-          class="link-row__input"
-          id="room-link-input"
-          type="text"
-          readonly
-          aria-label="Shareable invite link"
-        />
-        <button class="link-row__copy" id="copy-btn" type="button">
-          Copy
-        </button>
-      </div>
-
-      <p class="room-panel__hint" id="copy-hint"></p>
-
-    </section>
-
-    <p class="footer-note">No login needed · Just share the link · Play</p>
+    </div>
 
   </main>
 
-    <script type="module" src="script.js"></script>
+  <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+
+  <script type="module" src="script.js"></script>
 </body>
 </html>

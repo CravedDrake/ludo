@@ -9,6 +9,7 @@ import {
     query,
     limitToLast
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+import { showToast, copyText } from "./ui.js";
 
 /* =========================================================
    ROOM INIT — read code from URL
@@ -18,7 +19,6 @@ const params   = new URLSearchParams(window.location.search);
 const roomCode = params.get("code");
 
 if (!roomCode) {
-    alert("Invalid Room Code");
     window.location.href = "index.html";
 }
 
@@ -67,11 +67,14 @@ const MAX_MISSED_TURNS = 2;
 const joinCard      = document.getElementById("join-card");
 const joinNameInput = document.getElementById("join-name");
 const joinBtn       = document.getElementById("join-btn");
+const joinNameError = document.getElementById("join-name-error");
 const startGameBtn  = document.getElementById("start-game-btn");
 const leaveRoomBtn  = document.getElementById("leave-room-btn");
 const copyLinkBtn   = document.getElementById("copy-link-btn");
 const copyCodeBtn   = document.getElementById("copy-code-btn");
 const waitingMsg    = document.getElementById("waiting-message");
+const playerCountChip = document.getElementById("player-count");
+const gameStatusEl    = document.getElementById("game-status");
 
 const gameContainer = document.getElementById("game-container");
 const turnIndicator = document.getElementById("turn-indicator");
@@ -127,6 +130,7 @@ const confirmLeaveNoBtn  = document.getElementById("confirm-leave-no-btn");
 
 /* Set room code in header */
 document.getElementById("room-code").textContent = roomCode;
+document.getElementById("game-room-code").textContent = roomCode;
 
 /* =========================================================
    DICE SOUND — Web Audio API instead of a plain <audio>
@@ -565,6 +569,11 @@ function escapeHtml(str) {
     }[c]));
 }
 
+/* kind: "trophy" | "medal" | "flag" — drawn in room.css */
+function setModalIcon(kind) {
+    if (modalIconEl) modalIconEl.dataset.kind = kind;
+}
+
 function hideResultModal() {
     if (resultModal) resultModal.style.display = "none";
 }
@@ -575,10 +584,10 @@ function showInterimModal(slot, rank, players) {
     if (!resultModal) return;
     const name = players[slot]?.name || PLAYER_LABELS[slot];
 
-    modalIconEl.textContent  = rank === 1 ? "🏆" : "🎉";
+    setModalIcon(rank === 1 ? "trophy" : "medal");
     modalTitleEl.textContent = rank === 1
-        ? `${name} Won!`
-        : `${name} finished ${ordinal(rank)}!`;
+        ? `${name} won!`
+        : `${name} finished ${ordinal(rank)}`;
 
     modalRankingEl.style.display   = "none";
     modalRankingEl.innerHTML       = "";
@@ -601,13 +610,13 @@ function showFinalModal(finalOrder, players) {
     if (finalOrder.length <= 2) {
         const winner = finalOrder[0];
         const name   = players[winner]?.name || PLAYER_LABELS[winner];
-        modalIconEl.textContent      = "🏆";
-        modalTitleEl.textContent     = `${name} Won!`;
+        setModalIcon("trophy");
+        modalTitleEl.textContent     = `${name} won!`;
         modalRankingEl.style.display = "none";
         modalRankingEl.innerHTML      = "";
     } else {
-        modalIconEl.textContent      = "🏁";
-        modalTitleEl.textContent     = "Game Over!";
+        setModalIcon("flag");
+        modalTitleEl.textContent     = "Game over";
         modalRankingEl.style.display = "flex";
         modalRankingEl.innerHTML      = finalOrder.map((slot, i) => {
             const name  = players[slot]?.name || PLAYER_LABELS[slot];
@@ -615,7 +624,7 @@ function showFinalModal(finalOrder, players) {
             return `
                 <div class="rank-row">
                     <span class="rank-number">${i + 1}</span>
-                    <span class="legend-color legend-color--${color}"></span>
+                    <span class="rank-dot rank-dot--${color}"></span>
                     <span class="rank-name">${escapeHtml(name)}</span>
                 </div>`;
         }).join("");
@@ -670,6 +679,7 @@ function showConfirmLeaveModal() {
         return;
     }
     confirmLeaveModal.style.display = "flex";
+    confirmLeaveNoBtn?.focus();
 }
 
 function hideConfirmLeaveModal() {
@@ -716,23 +726,18 @@ modalContinueBtn?.addEventListener("click", hideResultModal);
    COPY ROOM LINK / CODE
 ========================================================= */
 
-async function copyTextToClipboard(text) {
-    try {
-        await navigator.clipboard.writeText(text);
-    } catch {
-        const tmp = document.createElement("input");
-        tmp.value = text;
-        document.body.appendChild(tmp);
-        tmp.select();
-        document.execCommand("copy");
-        document.body.removeChild(tmp);
-    }
-}
+const copyTextToClipboard = copyText;
 
 function flashCopied(btn, originalText) {
     if (!btn) return;
-    btn.textContent = "✓ Copied!";
-    setTimeout(() => { btn.textContent = originalText; }, 2500);
+    const label = btn.querySelector(".btn__label") || btn;
+    label.textContent = "Copied";
+    btn.classList.add("is-done");
+    showToast(originalText === "Copy link" ? "Invite link copied" : "Room code copied");
+    setTimeout(() => {
+        label.textContent = originalText;
+        btn.classList.remove("is-done");
+    }, 2200);
 }
 
 copyLinkBtn?.addEventListener("click", async () => {
@@ -752,39 +757,55 @@ copyCodeBtn?.addEventListener("click", async () => {
 ========================================================= */
 
 joinBtn?.addEventListener("click", joinRoom);
+joinNameInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") joinRoom(); });
+joinNameInput?.addEventListener("input", () => {
+    joinNameError.textContent = "";
+    joinNameInput.removeAttribute("aria-invalid");
+});
+
+function setJoinBtnLabel(text) {
+    const label = joinBtn?.querySelector(".btn__label");
+    if (label) label.textContent = text;
+}
+
+/* Shows why the visitor can't be here, then sends them back to the home page. */
+function leaveWithMessage(message) {
+    showToast(message, "error", 2600);
+    setTimeout(() => { window.location.href = "index.html"; }, 1800);
+}
 
 async function joinRoom() {
     const name = joinNameInput.value.trim();
     if (!name) {
-        joinNameInput.placeholder = "Name is required!";
+        joinNameError.textContent = "Enter your name so friends know who you are.";
+        joinNameInput.setAttribute("aria-invalid", "true");
         joinNameInput.focus();
         return;
     }
+    joinNameError.textContent = "";
+    joinNameInput.removeAttribute("aria-invalid");
 
-    joinBtn.disabled    = true;
-    joinBtn.textContent = "Joining…";
+    joinBtn.disabled = true;
+    setJoinBtnLabel("Joining…");
 
     try {
         const snap = await get(roomRef);
         if (!snap.exists()) {
-            alert("Room not found.");
-            window.location.href = "index.html";
+            leaveWithMessage("That room doesn't exist anymore.");
             return;
         }
 
         const room = snap.val();
 
         if (room.status === "playing") {
-            alert("Game already in progress.");
-            window.location.href = "index.html";
+            leaveWithMessage("That game has already started.");
             return;
         }
 
         const slot = getNextPlayerSlot(room.players, room.maxPlayers);
 
         if (!slot) {
-            alert("Room is full.");
-            window.location.href = "index.html";
+            leaveWithMessage("That room is full.");
             return;
         }
 
@@ -806,9 +827,9 @@ async function joinRoom() {
 
     } catch (err) {
         console.error("Join failed:", err);
-        alert("Failed to join room.");
-        joinBtn.disabled    = false;
-        joinBtn.textContent = "Join Game";
+        showToast("Couldn't join the room. Check your connection and try again.", "error");
+        joinBtn.disabled = false;
+        setJoinBtnLabel("Join game");
     }
 }
 
@@ -818,6 +839,10 @@ async function joinRoom() {
 
 startGameBtn?.addEventListener("click", async () => {
     if (!isHost) return;
+    if (startGameBtn.getAttribute("aria-disabled") === "true") {
+        showToast("You need at least 2 players to start", "error");
+        return;
+    }
 
     const room = latestRoom;
     if (!room) return;
@@ -998,6 +1023,13 @@ async function handleDiceClick(slot) {
 
 Object.keys(diceBoxes).forEach(slot => {
     diceBoxes[slot]?.addEventListener("click", () => handleDiceClick(slot));
+    // keyboard: Enter / Space roll the die (handleDiceClick still enforces every rule)
+    diceBoxes[slot]?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleDiceClick(slot);
+        }
+    });
 });
 
 /* =========================================================
@@ -1211,6 +1243,19 @@ function colorLabel(slot) {
     return PLAYER_LABELS[slot];
 }
 
+/* Toggle a `turn-<color>` class on <body>, keyed off the current
+   player, so room.css's turn-glow rules (top ambient glow, board
+   edge glow, mobile board halo) recolor with whoever's turn it is.
+   Cleared to nothing (falls back to the default brass glow) once
+   the game is over, since there's no "current player" any more. */
+function updateTurnGlow(currentTurn, gameOver) {
+    const body = document.body;
+    body.classList.remove("turn-red", "turn-blue", "turn-green", "turn-yellow");
+    if (!gameOver && currentTurn && COLOR_MAP[currentTurn]) {
+        body.classList.add(`turn-${COLOR_MAP[currentTurn]}`);
+    }
+}
+
 let timeoutHandledForTurn = null; // the turnStartedAt value we've already auto-acted on
 
 function updateTimerBadges(currentTurn, remaining, gameOver) {
@@ -1221,11 +1266,18 @@ function updateTimerBadges(currentTurn, remaining, gameOver) {
         const isActive = !gameOver && slot === currentTurn;
         badge.classList.toggle("dice-timer--active", isActive);
 
+        const box = diceBoxes[slot];
+
         if (isActive) {
             badge.textContent = String(Math.max(0, remaining));
             badge.classList.toggle("dice-timer--warning", remaining <= 10);
+            if (box) {
+                box.style.setProperty("--pct", String(Math.max(0, Math.min(1, remaining / TURN_SECONDS))));
+                box.classList.toggle("dice-box--timer-low", remaining <= 10);
+            }
         } else {
             badge.classList.remove("dice-timer--warning");
+            box?.classList.remove("dice-box--timer-low");
         }
     }
 }
@@ -1348,7 +1400,7 @@ function tickTurnTimer() {
     if (latestRoom.status !== "playing" || game.gameOver) {
         clearAllTimerBadges();
         return;
-    }
+    } 
 
     // Safety net: if a roll has been "in flight" way longer than it should
     // (the roller's device likely dropped), any client can clear it so the
@@ -1440,6 +1492,7 @@ onValue(roomRef, (snap) => {
     mode2p = room.maxPlayers === 2;
     document.body.classList.toggle("mode-2p", mode2p);
 
+    announcePlayerChanges(players);
     updatePlayerSlots(players);
 
     if (mySlot) {
@@ -1467,15 +1520,33 @@ onValue(roomRef, (snap) => {
         }
     }
 
-    if (waitingMsg) {
+    {
         const count = Object.keys(players).length;
         const max   = room.maxPlayers || 4;
-        if (room.status === "playing") {
-            waitingMsg.style.display = "none";
-        } else {
-            waitingMsg.textContent = count >= max
-                ? "All players joined! Host can start."
-                : `Waiting for players… (${count}/${max})`;
+        const full  = count >= max;
+
+        document.body.classList.toggle("is-full", full);
+        if (playerCountChip) playerCountChip.textContent = `${count} of ${max}`;
+        if (gameStatusEl) {
+            gameStatusEl.textContent = room.status === "playing"
+                ? "Game in progress"
+                : full ? "Room is full" : "Waiting for players…";
+        }
+
+        if (waitingMsg) {
+            if (room.status === "playing") {
+                waitingMsg.style.display = "none";
+            } else if (isHost) {
+                waitingMsg.textContent = count < 2
+                    ? "Share the code. You need at least 2 players to start."
+                    : full
+                        ? "Everyone's here. Start when you're ready."
+                        : `You can start now, or wait for more players (${count} of ${max}).`;
+            } else {
+                waitingMsg.textContent = full
+                    ? "Everyone's here. Waiting for the host to start."
+                    : `Waiting for players (${count} of ${max})…`;
+            }
         }
     }
 
@@ -1498,17 +1569,23 @@ let lastBoardRenderSignature = null;
 
 function showGameUI(room, players) {
     document.querySelector(".page").style.display = "none";
-    gameContainer.style.display = "block";
+    document.body.classList.add("in-game");
+    // FIXED: this used to be "block", which silently killed the
+    // flex-direction/align-items/gap rules room.css sets on
+    // #game-container (they only apply when display is flex/grid).
+    // Without flex, the header/board/leave-button stack lost its
+    // gap and reliable centering, which is what made the mobile
+    // layout look off — margins between them could collapse
+    // instead of respecting the intended 14px gap.
+    gameContainer.style.display = "flex";
 
     const game     = room.game;
     const mySlot   = getMySlot();
     const isMeTurn = game.currentTurn === mySlot;
 
-    if (game.gameOver) {
-        turnIndicator.textContent = "🏁 Game Over!";
-    } else {
-        turnIndicator.textContent = `${colorLabel(game.currentTurn)}'s turn${isMeTurn ? " (You!)" : ""}`;
-    }
+    renderTurnIndicator(game, players, mySlot, isMeTurn);
+
+    updateTurnGlow(game.currentTurn, game.gameOver);
 
     updateDiceBoxes(game, players, mySlot);
 
@@ -1526,8 +1603,48 @@ function showGameUI(room, players) {
 
     updateTokenClickability(game, mySlot);
 
-    updatePlayerLegend(players, game.currentTurn, game.winner);
-    updateHomeLabels(players);
+    updatePlayerPanels(game, players, mySlot);
+}
+
+/* Headline + hint above the board: whose turn, and what to do next. */
+function renderTurnIndicator(game, players, mySlot, isMeTurn) {
+    let text, hint = "";
+
+    if (game.gameOver) {
+        text = "Game over";
+    } else {
+        const rolling = !!(game.rolling && game.rolling.slot);
+        const name    = players[game.currentTurn]?.name || colorLabel(game.currentTurn);
+
+        if (isMeTurn) {
+            text = "Your turn";
+            hint = rolling ? "Rolling…" : game.diceRolled ? "Pick a token to move" : "Tap your die to roll";
+        } else {
+            text = `${name}'s turn`;
+            hint = rolling ? "Rolling…" : game.diceRolled ? "Choosing a move" : "Waiting for a roll";
+        }
+    }
+
+    const signature = text + "|" + hint + "|" + (isMeTurn ? "1" : "0");
+    if (turnIndicator.dataset.sig === signature) return;
+    turnIndicator.dataset.sig = signature;
+
+    turnIndicator.classList.toggle("turn--mine", !!isMeTurn && !game.gameOver);
+    turnIndicator.replaceChildren();
+
+    const dot = document.createElement("span");
+    dot.className = "turn__dot";
+    const strong = document.createElement("span");
+    strong.className = "turn__text";
+    strong.textContent = text;
+    turnIndicator.append(dot, strong);
+
+    if (hint) {
+        const h = document.createElement("span");
+        h.className = "turn__hint";
+        h.textContent = hint;
+        turnIndicator.append(h);
+    }
 }
 
 /* =========================================================
@@ -1556,6 +1673,14 @@ function updateDiceBoxes(game, players, mySlot) {
         box.classList.toggle("dice-idle", !isThisTurn);
         box.classList.toggle("dice-box--mine", slot === mySlot);
 
+        // "ready": it's my turn and the die is waiting for me to roll it
+        const ready = slot === mySlot && isThisTurn && !game.diceRolled
+                      && !locked && !(game.rolling && game.rolling.slot);
+        box.classList.toggle("dice-box--ready", ready);
+        box.tabIndex = ready ? 0 : -1;
+        box.setAttribute("aria-disabled", ready ? "false" : "true");
+        box.setAttribute("aria-label", ready ? `Roll your die` : `${PLAYER_LABELS[slot]} die`);
+
         // Don't stomp the cube while a synced rolling animation owns this box
         if (currentAnimatingSlot === slot) continue;
 
@@ -1570,38 +1695,47 @@ function updateDiceBoxes(game, players, mySlot) {
 }
 
 /* =========================================================
-   PLAYER LEGEND
+   PLAYER PANELS — one per colour, each owns that colour's die.
+   Shows name, tokens home (4 dots) and what the player is doing.
 ========================================================= */
 
-function updatePlayerLegend(players, currentTurn, winner) {
-    for (let i = 1; i <= 4; i++) {
-        const slot     = "player" + i;
-        const itemEl   = document.getElementById(`legend-${slot}`);
-        const nameEl   = document.getElementById(`legend-${slot}-name`);
-        if (!itemEl || !nameEl) continue;
+function updatePlayerPanels(game, players, mySlot) {
+    const finishOrder = game.finishOrder || [];
+    const rolling     = !!(game.rolling && game.rolling.slot);
 
-        const p = players[slot];
-
-        nameEl.textContent = p ? p.name : `${colorLabel(slot)} (empty)`;
-        itemEl.classList.toggle("legend-item--empty", !p);
-        itemEl.classList.toggle("legend-item--turn", !!p && slot === currentTurn && !winner);
-        itemEl.classList.toggle("legend-item--winner", !!p && slot === winner);
-    }
-}
-
-/* =========================================================
-   HOME LABELS
-========================================================= */
-
-function updateHomeLabels(players) {
     for (let i = 1; i <= 4; i++) {
         const slot  = "player" + i;
-        const color = COLOR_MAP[slot];
-        const el    = document.getElementById(`home-name-${color}`);
-        if (!el) continue;
+        const panel = document.getElementById(`panel-${slot}`);
+        if (!panel) continue;
 
-        const p = players[slot];
-        el.textContent = p ? p.name : "";
+        const p        = players[slot];
+        const nameEl   = document.getElementById(`panel-${slot}-name`);
+        const initEl   = document.getElementById(`panel-${slot}-initial`);
+        const statusEl = document.getElementById(`panel-${slot}-status`);
+        const homeEl   = document.getElementById(`panel-${slot}-home`);
+
+        const isTurn  = !!p && !game.gameOver && slot === game.currentTurn;
+        const rank    = finishOrder.indexOf(slot);
+        const done    = !!p && rank !== -1;
+        const home    = Object.values(game.tokens?.[slot] || {}).filter(t => t.index === 56).length;
+
+        nameEl.textContent = p ? p.name : colorLabel(slot);
+        initEl.textContent = p ? (p.name.trim()[0] || "?") : colorLabel(slot)[0];
+        panel.dataset.kind = (p && p.kind) || "human";
+
+        panel.classList.toggle("pp--empty", !p);
+        panel.classList.toggle("pp--turn", isTurn);
+        panel.classList.toggle("pp--done", done);
+        panel.classList.toggle("pp--mine", !!p && slot === mySlot);
+
+        homeEl?.querySelectorAll("i").forEach((dot, n) => dot.classList.toggle("on", n < home));
+
+        let status;
+        if (!p)               status = "No player";
+        else if (done)        status = rank === 0 ? "Finished 1st" : `Finished ${ordinal(rank + 1)}`;
+        else if (isTurn)      status = rolling ? "Rolling…" : game.diceRolled ? "Moving" : (slot === mySlot ? "Your turn" : "Playing");
+        else                  status = `${home}/4 home`;
+        statusEl.textContent = status;
     }
 }
 
@@ -1934,6 +2068,14 @@ function bindTokenClickDelegation() {
         handleTokenClick(player, tokenKey);
     });
 
+    board.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        const tokenEl = e.target.closest?.(".token");
+        if (!tokenEl) return;
+        e.preventDefault();
+        tokenEl.click();
+    });
+
     tokenClickDelegationBound = true;
 }
 
@@ -1947,6 +2089,8 @@ function updateTokenClickability(game, mySlot) {
             if (el) {
                 el.classList.remove("clickable");
                 el.style.cursor = "default";
+                el.removeAttribute("tabindex");
+                el.setAttribute("aria-disabled", "true");
             }
         }
     }
@@ -1971,16 +2115,21 @@ function updateTokenClickability(game, mySlot) {
 
         el.classList.toggle("clickable", isLegal);
         el.style.cursor = isLegal ? "pointer" : "default";
+        // keyboard users can Tab to a movable token and press Enter / Space
+        if (isLegal) el.tabIndex = 0; else el.removeAttribute("tabindex");
+        el.setAttribute("aria-disabled", isLegal ? "false" : "true");
     }
 }
 
 bindTokenClickDelegation();
 
 /* =========================================================
-   PLAYER SLOT UI
+   PLAYER SLOT UI (lobby)
 ========================================================= */
 
 function updatePlayerSlots(players) {
+    const mySlot = getMySlot();
+
     for (let i = 1; i <= 4; i++) {
         const slot     = "player" + i;
         const nameEl   = document.getElementById(slot + "-name");
@@ -1992,15 +2141,44 @@ function updatePlayerSlots(players) {
         const p = players[slot];
 
         if (p) {
-            nameEl.textContent   = p.name + (p.isHost ? " 👑" : "");
+            nameEl.textContent   = p.name;
             statusEl.textContent = "Ready";
             slotEl?.classList.replace("player-slot--empty", "player-slot--filled");
+            slotEl?.setAttribute("data-kind", p.kind || "human");
+            const initial = slotEl?.querySelector(".avatar__initial");
+            if (initial) initial.textContent = p.name.trim()[0] || "?";
         } else {
-            nameEl.textContent   = "Waiting…";
-            statusEl.textContent = "Empty";
+            nameEl.textContent   = "Waiting for player";
+            statusEl.textContent = "Open seat";
             slotEl?.classList.replace("player-slot--filled", "player-slot--empty");
+            const initial = slotEl?.querySelector(".avatar__initial");
+            if (initial) initial.textContent = "";
+        }
+
+        const hostTag = slotEl?.querySelector(".tag--host");
+        const youTag  = slotEl?.querySelector(".tag--you");
+        if (hostTag) hostTag.hidden = !(p && p.isHost);
+        if (youTag)  youTag.hidden  = !(p && slot === mySlot);
+    }
+}
+
+/* Realtime join / leave feedback in the lobby */
+let previousPlayers = null;
+
+function announcePlayerChanges(players) {
+    if (previousPlayers) {
+        const mySlot = getMySlot();
+        for (const slot of Object.keys(COLOR_MAP)) {
+            const was = previousPlayers[slot];
+            const now = players[slot];
+            if (!was && now && slot !== mySlot) {
+                showToast(`${now.name} joined the room`, COLOR_MAP[slot]);
+            } else if (was && !now && slot !== mySlot) {
+                showToast(`${was.name} left the room`, "default");
+            }
         }
     }
+    previousPlayers = players;
 }
 
 window.handleTokenClick = handleTokenClick;
@@ -2024,6 +2202,14 @@ const chatInput       = document.getElementById("chat-input");
 const chatSendBtn     = document.getElementById("chat-send-btn");
 const chatUnreadBadge = document.getElementById("chat-unread-badge");
 const chatCharCounter = document.getElementById("chat-char-counter");
+const chatBackdrop    = document.getElementById("chat-backdrop");
+
+/* On very wide screens the chat is docked beside the game (room.css),
+   so it counts as "open" while a game is running. */
+const dockedChatQuery = window.matchMedia("(min-width: 1600px)");
+function isChatDocked() {
+    return dockedChatQuery.matches && document.body.classList.contains("in-game");
+}
 
 let chatUnsubscribe   = null;
 let chatIsOpen        = false;
@@ -2118,7 +2304,7 @@ function addMessage(data, id) {
     bubble.classList.add("chat-fade-in");
     chatMessagesEl.appendChild(bubble);
 
-    if (data.sender !== "system" && data.sender !== mySlot && !chatIsOpen) {
+    if (data.sender !== "system" && data.sender !== mySlot && !chatIsOpen && !isChatDocked()) {
         chatUnreadCount++;
         updateChatUnreadBadge();
         playChatNotificationSound();
@@ -2174,6 +2360,8 @@ function playChatNotificationSound() {
 function openChatPanel() {
     chatIsOpen = true;
     chatPanel?.classList.add("chat-panel--open");
+    chatBackdrop?.classList.add("chat-backdrop--on");
+    chatToggleBtn?.setAttribute("aria-expanded", "true");
     chatUnreadCount = 0;
     updateChatUnreadBadge();
     scrollChatToBottom();
@@ -2183,7 +2371,18 @@ function openChatPanel() {
 function closeChatPanel() {
     chatIsOpen = false;
     chatPanel?.classList.remove("chat-panel--open");
+    chatBackdrop?.classList.remove("chat-backdrop--on");
+    chatToggleBtn?.setAttribute("aria-expanded", "false");
+    chatToggleBtn?.focus({ preventScroll: true });
 }
+
+chatBackdrop?.addEventListener("click", closeChatPanel);
+
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (confirmLeaveModal && confirmLeaveModal.style.display !== "none") hideConfirmLeaveModal();
+    else if (chatIsOpen) closeChatPanel();
+});
 
 chatToggleBtn?.addEventListener("click", () => {
     chatIsOpen ? closeChatPanel() : openChatPanel();
@@ -2193,6 +2392,7 @@ chatCloseBtn?.addEventListener("click", closeChatPanel);
 function updateChatCharCounter() {
     if (!chatCharCounter || !chatInput) return;
     chatCharCounter.textContent = `${chatInput.value.length}/${CHAT_MAX_LENGTH}`;
+    chatCharCounter.classList.toggle("chat-char-counter--near", chatInput.value.length >= CHAT_MAX_LENGTH - 40);
 }
 
 function autoGrowChatInput() {
@@ -2205,7 +2405,10 @@ async function sendMessage() {
     if (!chatInput) return;
 
     const mySlot = getMySlot();
-    if (!mySlot) return;
+    if (!mySlot) {
+        showToast("Join the room to send messages", "error");
+        return;
+    }
 
     const raw = chatInput.value.trim();
     if (!raw) return;

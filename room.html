@@ -2,259 +2,275 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ludo — Waiting Room</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#080D18" />
+<title>Ludo — Room</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231B263B'/%3E%3Ccircle cx='10' cy='10' r='3.4' fill='%23FF5263'/%3E%3Ccircle cx='22' cy='10' r='3.4' fill='%233B82F6'/%3E%3Ccircle cx='10' cy='22' r='3.4' fill='%2322C55E'/%3E%3Ccircle cx='22' cy='22' r='3.4' fill='%23FBBF24'/%3E%3C/svg%3E" />
 
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link
-    href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"
-    rel="stylesheet"
-/>
-
+<link rel="preload" href="fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="stylesheet" href="base.css" />
 <link rel="stylesheet" href="room.css" />
-<base target="_blank">
 </head>
 
 <body>
 
-<div class="bg-grid" aria-hidden="true"></div>
+<!-- ╔════════ WAITING ROOM ════════╗ -->
+<main class="page lobby">
 
-<!-- ╔════════ WAITING ROOM UI ════════╗ -->
-<main class="page">
+  <header class="bar">
+    <a class="brand" href="index.html" aria-label="Ludo home">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">Ludo</span>
+    </a>
+  </header>
 
-<!-- HEADER -->
-<header class="hero">
-    <div class="ludo-token" aria-hidden="true">
-    <div class="ludo-token__body">
-        <div class="ludo-token__dome"></div>
-    </div>
-    </div>
-    <h1 class="hero__title">LUDO</h1>
-    <p class="hero__subtitle">Waiting Room</p>
-</header>
+  <div class="lobby__grid">
 
-<!-- ROOM INFO -->
-<section class="card" aria-label="Room information">
-    <h2 class="card__heading">Room Code</h2>
-<div class="room-code-row">
-  <div class="room-code" id="room-code"></div>
-</div>
-<div class="copy-btn-group">
-  <button class="btn-copy" id="copy-link-btn">Copy Link</button>
-  <button class="btn-copy" id="copy-code-btn">Copy Code</button>
-</div>
-    <div class="divider"></div>
-    <div class="game-status-row">
-    <span class="game-status__label">Game Status</span>
-    <span class="game-status__value" id="game-status">Waiting for players…</span>
-    </div>
-</section>
+    <div class="lobby__side">
 
-<!-- JOIN CARD -->
-<section class="card" id="join-card">
-    <h2 class="card__heading">Join Room</h2>
-    <div class="field">
-    <input
-        type="text"
-        id="join-name"
-        class="field__input"
-        placeholder="Enter your name"
-        maxlength="20"
-        autocomplete="off"
-    />
-    </div>
-    <button id="join-btn" class="btn-create" type="button">Join Game</button>
-</section>
-
-<!-- PLAYERS -->
-<section class="card">
-    <h2 class="card__heading">Players</h2>
-    <ul class="player-list">
-    <li class="player-slot player-slot--empty" id="player1-slot">
-        <div class="player-slot__color player-slot__color--red"></div>
-        <div class="player-slot__info">
-        <span id="player1-name">Waiting…</span>
-        <span id="player1-status">Empty</span>
+      <!-- ROOM INFO -->
+      <section class="card room-card" aria-label="Room information">
+        <h2 class="card__title">Room code</h2>
+        <div class="room-code" id="room-code" aria-label="Room code"></div>
+        <div class="copy-btn-group">
+          <button class="btn btn--secondary" id="copy-code-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>
+            <span class="btn__label">Copy code</span>
+          </button>
+          <button class="btn btn--secondary" id="copy-link-btn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l3-3a5 5 0 0 0-7.1-7.1l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.1 0l-3 3A5 5 0 0 0 11 21.1l1.7-1.7"/></svg>
+            <span class="btn__label">Copy link</span>
+          </button>
         </div>
-        <span class="badge badge--host">Host</span>
-    </li>
-    <li class="player-slot player-slot--empty" id="player2-slot">
-        <div class="player-slot__color player-slot__color--blue"></div>
-        <div class="player-slot__info">
-        <span id="player2-name">Waiting…</span>
-        <span id="player2-status">Empty</span>
+        <div class="status-row">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span class="status-row__text" id="game-status">Waiting for players…</span>
         </div>
-    </li>
-    <li class="player-slot player-slot--empty" id="player3-slot">
-        <div class="player-slot__color player-slot__color--green"></div>
-        <div class="player-slot__info">
-        <span id="player3-name">Waiting…</span>
-        <span id="player3-status">Empty</span>
+      </section>
+
+      <!-- JOIN CARD -->
+      <section class="card join-card" id="join-card" aria-label="Join this room">
+        <h2 class="card__title">Join this room</h2>
+        <div class="field">
+          <label class="field__label" for="join-name">Your name</label>
+          <input
+            type="text"
+            id="join-name"
+            class="field__input"
+            placeholder="Name or nickname"
+            maxlength="20"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="field__error" id="join-name-error" role="alert"></span>
         </div>
-    </li>
-    <li class="player-slot player-slot--empty" id="player4-slot">
-        <div class="player-slot__color player-slot__color--yellow"></div>
-        <div class="player-slot__info">
-        <span id="player4-name">Waiting…</span>
-        <span id="player4-status">Empty</span>
-        </div>
-    </li>
-    </ul>
-</section>
+        <button id="join-btn" class="btn btn--primary btn--block" type="button">
+          <span class="btn__label">Join game</span>
+        </button>
+      </section>
 
-<!-- ACTIONS -->
-<div class="action-row">
-    <button class="btn-leave" id="leave-room-btn" type="button">Leave Room</button>
-    <button
-    class="btn-start btn-start--disabled"
-    id="start-game-btn"
-    aria-disabled="true"
-    type="button"
-    >🎲 Start Game</button>
-</div>
+    </div>
 
-<p class="waiting-message" id="waiting-message">Waiting for more players…</p>
+    <!-- PLAYERS -->
+    <section class="card players-card" aria-label="Players">
+      <div class="card__head">
+        <h2 class="card__title">Players</h2>
+        <span class="count-chip" id="player-count" aria-live="polite">0 of 4</span>
+      </div>
 
+      <ul class="player-list">
+
+          <li class="player-slot player-slot--red player-slot--empty" id="player1-slot" data-kind="human">
+            <div class="avatar avatar--red" aria-hidden="true"><span class="avatar__initial"></span></div>
+            <div class="player-slot__info">
+              <span class="player-slot__name" id="player1-name">Waiting…</span>
+              <span class="player-slot__status" id="player1-status">Open seat</span>
+            </div>
+            <div class="player-slot__tags">
+              <span class="tag tag--host" hidden>Host</span>
+              <span class="tag tag--you" hidden>You</span>
+            </div>
+          </li>
+          <li class="player-slot player-slot--blue player-slot--empty" id="player2-slot" data-kind="human">
+            <div class="avatar avatar--blue" aria-hidden="true"><span class="avatar__initial"></span></div>
+            <div class="player-slot__info">
+              <span class="player-slot__name" id="player2-name">Waiting…</span>
+              <span class="player-slot__status" id="player2-status">Open seat</span>
+            </div>
+            <div class="player-slot__tags">
+              <span class="tag tag--host" hidden>Host</span>
+              <span class="tag tag--you" hidden>You</span>
+            </div>
+          </li>
+          <li class="player-slot player-slot--green player-slot--empty" id="player3-slot" data-kind="human">
+            <div class="avatar avatar--green" aria-hidden="true"><span class="avatar__initial"></span></div>
+            <div class="player-slot__info">
+              <span class="player-slot__name" id="player3-name">Waiting…</span>
+              <span class="player-slot__status" id="player3-status">Open seat</span>
+            </div>
+            <div class="player-slot__tags">
+              <span class="tag tag--host" hidden>Host</span>
+              <span class="tag tag--you" hidden>You</span>
+            </div>
+          </li>
+          <li class="player-slot player-slot--yellow player-slot--empty" id="player4-slot" data-kind="human">
+            <div class="avatar avatar--yellow" aria-hidden="true"><span class="avatar__initial"></span></div>
+            <div class="player-slot__info">
+              <span class="player-slot__name" id="player4-name">Waiting…</span>
+              <span class="player-slot__status" id="player4-status">Open seat</span>
+            </div>
+            <div class="player-slot__tags">
+              <span class="tag tag--host" hidden>Host</span>
+              <span class="tag tag--you" hidden>You</span>
+            </div>
+          </li>
+      </ul>
+
+      <p class="waiting-message" id="waiting-message">Waiting for players…</p>
+
+      <div class="action-row">
+        <button class="btn btn--ghost btn--danger" id="leave-room-btn" type="button">Leave room</button>
+        <button class="btn btn--primary btn-start btn-start--disabled" id="start-game-btn" aria-disabled="true" type="button">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+          <span class="btn__label">Start game</span>
+        </button>
+      </div>
+    </section>
+
+  </div>
 </main>
 
 <!-- ╔════════ GAME UI ════════╗ -->
 <div id="game-container" style="display:none;">
 
-<div class="game-header">
-    <div id="turn-indicator"></div>
+  <header class="game-bar">
+    <a class="brand brand--mark" href="index.html" aria-label="Ludo home">
+      <span class="brand__mark" aria-hidden="true"></span>
+    </a>
 
-    <!-- PLAYER LEGEND — color swatch beside each player's name -->
-    <div class="player-legend" id="player-legend">
-    <div class="legend-item legend-item--empty" id="legend-player1" data-slot="player1">
-        <span class="legend-color legend-color--red"></span>
-        <span class="legend-name" id="legend-player1-name">Red</span>
+    <div class="room-chip" title="Room code">
+      <span class="room-chip__label">Room</span>
+      <span class="room-chip__code" id="game-room-code"></span>
     </div>
-    <div class="legend-item legend-item--empty" id="legend-player2" data-slot="player2">
-        <span class="legend-color legend-color--blue"></span>
-        <span class="legend-name" id="legend-player2-name">Blue</span>
-    </div>
-    <div class="legend-item legend-item--empty" id="legend-player3" data-slot="player3">
-        <span class="legend-color legend-color--green"></span>
-        <span class="legend-name" id="legend-player3-name">Green</span>
-    </div>
-    <div class="legend-item legend-item--empty" id="legend-player4" data-slot="player4">
-        <span class="legend-color legend-color--yellow"></span>
-        <span class="legend-name" id="legend-player4-name">Yellow</span>
-    </div>
-    </div>
-</div>
 
-<!--
-    BOARD WRAP — wraps the board plus 4 per-color dice boxes.
-    Each dice box is positioned absolutely so it looks like a small
-    tab/extension sticking out of the board, right above/below that
-    color's own home corner. Red/Blue sit above the board (their
-    corners are the top two), Green/Yellow sit below (their corners
-    are the bottom two). Red & Green (left corners) sit on the left,
-    Blue & Yellow (right corners) sit on the right. Clicking a dice
-    box rolls for that color — but only the local player's own color
-    is actually clickable (enforced in room.js).
+    <div class="turn" id="turn-indicator" role="status" aria-live="polite"></div>
 
-    Each dice box also carries a small "dice-timer" badge (the 45s
-    per-turn countdown clock) tucked into its corner so it reads as
-    part of the same tab rather than a separate element.
+    <button class="btn btn--ghost btn--sm btn-leave--ingame" id="leave-game-btn-bottom" type="button" aria-label="Leave game">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span class="btn__label">Leave</span>
+    </button>
+  </header>
 
-    Dice faces are a real CSS 3D cube (.die-scene / .die-cube / 6x
-    .die-face, each face laid out with a 3x3 pip grid) instead of a
-    flat unicode glyph. No images/textures — pure CSS 3D transforms
-    + CSS Grid, driven entirely by room.js (see the "3D DICE —
-    ROTATION ENGINE" section there for the rotation math).
--->
-<div class="board-wrap" id="board-wrap">
+  <!--
+    GAME STAGE — one grid, two layouts.
+    Mobile:   red | blue  /  board  /  green | yellow   (panels mirror the board corners)
+    Desktop:  red + green panels | board | blue + yellow panels
+    Each panel owns that colour's 3D die (#dice-box-playerN). room.js still
+    only clicks the local player's own die, exactly as before.
+  -->
+  <div class="game-stage">
 
-    <div class="dice-box dice-box--red" id="dice-box-player1" aria-label="Red dice">
-        <div class="die-scene">
+      <section class="pp pp--red pp--empty" id="panel-player1" data-slot="player1" aria-label="Red player">
+        <div class="avatar avatar--red" aria-hidden="true"><span class="avatar__initial" id="panel-player1-initial">R</span></div>
+        <div class="pp__text">
+          <span class="pp__name" id="panel-player1-name">Red</span>
+          <span class="pp__meta">
+            <span class="pp__home" id="panel-player1-home" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="pp__status" id="panel-player1-status"></span>
+          </span>
+        </div>
+        <div class="dice-box dice-box--red" id="dice-box-player1" role="button" tabindex="0" aria-label="Red die">
+          <div class="die-scene">
             <div class="die-cube" id="dice-cube-player1">
-                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
-                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+              <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
             </div>
+          </div>
+          <div class="dice-timer" id="dice-timer-player1">45</div>
         </div>
-        <div class="dice-timer" id="dice-timer-player1">45</div>
-    </div>
-
-    <div class="dice-box dice-box--blue" id="dice-box-player2" aria-label="Blue dice">
-        <div class="die-scene">
+      </section>
+      <section class="pp pp--blue pp--empty" id="panel-player2" data-slot="player2" aria-label="Blue player">
+        <div class="avatar avatar--blue" aria-hidden="true"><span class="avatar__initial" id="panel-player2-initial">B</span></div>
+        <div class="pp__text">
+          <span class="pp__name" id="panel-player2-name">Blue</span>
+          <span class="pp__meta">
+            <span class="pp__home" id="panel-player2-home" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="pp__status" id="panel-player2-status"></span>
+          </span>
+        </div>
+        <div class="dice-box dice-box--blue" id="dice-box-player2" role="button" tabindex="0" aria-label="Blue die">
+          <div class="die-scene">
             <div class="die-cube" id="dice-cube-player2">
-                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
-                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+              <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
             </div>
+          </div>
+          <div class="dice-timer" id="dice-timer-player2">45</div>
         </div>
-        <div class="dice-timer" id="dice-timer-player2">45</div>
-    </div>
-
-    <div class="dice-box dice-box--green" id="dice-box-player3" aria-label="Green dice">
-        <div class="die-scene">
+      </section>
+      <section class="pp pp--green pp--empty" id="panel-player3" data-slot="player3" aria-label="Green player">
+        <div class="avatar avatar--green" aria-hidden="true"><span class="avatar__initial" id="panel-player3-initial">G</span></div>
+        <div class="pp__text">
+          <span class="pp__name" id="panel-player3-name">Green</span>
+          <span class="pp__meta">
+            <span class="pp__home" id="panel-player3-home" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="pp__status" id="panel-player3-status"></span>
+          </span>
+        </div>
+        <div class="dice-box dice-box--green" id="dice-box-player3" role="button" tabindex="0" aria-label="Green die">
+          <div class="die-scene">
             <div class="die-cube" id="dice-cube-player3">
-                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
-                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+              <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
             </div>
+          </div>
+          <div class="dice-timer" id="dice-timer-player3">45</div>
         </div>
-        <div class="dice-timer" id="dice-timer-player3">45</div>
-    </div>
-
-    <div class="dice-box dice-box--yellow" id="dice-box-player4" aria-label="Yellow dice">
-        <div class="die-scene">
+      </section>
+      <section class="pp pp--yellow pp--empty" id="panel-player4" data-slot="player4" aria-label="Yellow player">
+        <div class="avatar avatar--yellow" aria-hidden="true"><span class="avatar__initial" id="panel-player4-initial">Y</span></div>
+        <div class="pp__text">
+          <span class="pp__name" id="panel-player4-name">Yellow</span>
+          <span class="pp__meta">
+            <span class="pp__home" id="panel-player4-home" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span class="pp__status" id="panel-player4-status"></span>
+          </span>
+        </div>
+        <div class="dice-box dice-box--yellow" id="dice-box-player4" role="button" tabindex="0" aria-label="Yellow die">
+          <div class="die-scene">
             <div class="die-cube" id="dice-cube-player4">
-                <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
-                <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
-                <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--1"><span class="die-pip die-p-e"></span></div>
+              <div class="die-face die-face--2"><span class="die-pip die-p-a"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--3"><span class="die-pip die-p-a"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--4"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--5"><span class="die-pip die-p-a"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-e"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-i"></span></div>
+              <div class="die-face die-face--6"><span class="die-pip die-p-a"></span><span class="die-pip die-p-d"></span><span class="die-pip die-p-g"></span><span class="die-pip die-p-c"></span><span class="die-pip die-p-f"></span><span class="die-pip die-p-i"></span></div>
             </div>
+          </div>
+          <div class="dice-timer" id="dice-timer-player4">45</div>
         </div>
-        <div class="dice-timer" id="dice-timer-player4">45</div>
-    </div>
+      </section>
 
-    <!--
-        LUDO BOARD — 15×15 grid
-        Layout key:
-        Columns 0–5   = left block
-        Column  6     = vertical corridor
-        Columns 7–8   = center columns  (shared with horizontal corridor)
-        Column  9–14  = right block
+    <div class="board-wrap" id="board-wrap">
 
-        Rows 0–5   = top block
-        Row  6     = horizontal corridor
-        Rows 7–8   = center rows        (shared with vertical corridor)
-        Row  9–14  = bottom block
-
-        Corner zones (6×6 squares):
-        Red    = rows 0–5,  cols 0–5
-        Blue   = rows 0–5,  cols 9–14
-        Green  = rows 9–14, cols 0–5
-        Yellow = rows 9–14, cols 9–14
-
-        Home stretch (6 cells leading to center):
-        Red    runs right along row 7,   cols 1–6
-        Blue   runs down  along col 7,   rows 1–6
-        Green  runs up    along col 7,   rows 8–13
-        Yellow runs left  along row 7,   cols 8–13
-
-        Center square = rows 6–8, cols 6–8 (3×3 finishing zone)
-
-        Track path cell IDs = "c-ROW-COL"
-    -->
-
-    <div id="ludo-board">
+      <!--
+        LUDO BOARD — 15x15 grid (cell ids "c-ROW-COL"; room.js depends on these)
+        Corner zones are 6x6; home stretches run along row/col 7; the 3x3 centre
+        is drawn by #ludo-board::before. Layout key is unchanged from the original.
+      -->
+      <div id="ludo-board" role="group" aria-label="Ludo board">
 
         <!-- ── ROW 0 ── -->
         <!-- Red home zone rows 0-5, cols 0-5 -->
@@ -276,7 +292,6 @@
         <div class="b-cell zone-blue"   id="c-0-12"></div>
         <div class="b-cell zone-blue"   id="c-0-13"></div>
         <div class="b-cell zone-blue"   id="c-0-14"></div>
-
         <!-- ── ROW 1 ── -->
         <div class="b-cell zone-red"    id="c-1-0"></div>
         <div class="b-cell home-inner red-inner" id="c-1-1"></div>
@@ -293,7 +308,6 @@
         <div class="b-cell home-inner blue-inner" id="c-1-12"></div>
         <div class="b-cell home-inner blue-inner" id="c-1-13"></div>
         <div class="b-cell zone-blue"   id="c-1-14"></div>
-
         <!-- ── ROW 2 ── -->
         <div class="b-cell zone-red"    id="c-2-0"></div>
         <div class="b-cell home-inner red-inner" id="c-2-1"></div>
@@ -310,7 +324,6 @@
         <div class="b-cell home-inner blue-inner" id="c-2-12"></div>
         <div class="b-cell home-inner blue-inner" id="c-2-13"></div>
         <div class="b-cell zone-blue"   id="c-2-14"></div>
-
         <!-- ── ROW 3 ── -->
         <div class="b-cell zone-red"    id="c-3-0"></div>
         <div class="b-cell home-inner red-inner" id="c-3-1"></div>
@@ -327,7 +340,6 @@
         <div class="b-cell home-inner blue-inner" id="c-3-12"></div>
         <div class="b-cell home-inner blue-inner" id="c-3-13"></div>
         <div class="b-cell zone-blue"   id="c-3-14"></div>
-
         <!-- ── ROW 4 ── -->
         <div class="b-cell zone-red"    id="c-4-0"></div>
         <div class="b-cell home-inner red-inner" id="c-4-1"></div>
@@ -344,7 +356,6 @@
         <div class="b-cell home-inner blue-inner" id="c-4-12"></div>
         <div class="b-cell home-inner blue-inner" id="c-4-13"></div>
         <div class="b-cell zone-blue"   id="c-4-14"></div>
-
         <!-- ── ROW 5 ── -->
         <div class="b-cell zone-red"    id="c-5-0"></div>
         <div class="b-cell zone-red"    id="c-5-1"></div>
@@ -361,7 +372,6 @@
         <div class="b-cell zone-blue"   id="c-5-12"></div>
         <div class="b-cell zone-blue"   id="c-5-13"></div>
         <div class="b-cell zone-blue"   id="c-5-14"></div>
-
         <!-- ── ROW 6 (top horizontal corridor) ── -->
         <div class="b-cell track"           id="c-6-0"></div>
         <div class="b-cell track safe-red"  id="c-6-1"></div>
@@ -378,7 +388,6 @@
         <div class="b-cell track safe-neutral" id="c-6-12"></div>
         <div class="b-cell track"           id="c-6-13"></div>
         <div class="b-cell track"           id="c-6-14"></div>
-
         <!-- ── ROW 7 (left-right center row) ── -->
         <div class="b-cell track"           id="c-7-0"></div>
         <div class="b-cell home-stretch stretch-red" id="c-7-1"></div>
@@ -395,7 +404,6 @@
         <div class="b-cell home-stretch stretch-yellow" id="c-7-12"></div>
         <div class="b-cell home-stretch stretch-yellow" id="c-7-13"></div>
         <div class="b-cell track"           id="c-7-14"></div>
-
         <!-- ── ROW 8 (bottom horizontal corridor) ── -->
         <div class="b-cell track"            id="c-8-0"></div>
         <div class="b-cell track"            id="c-8-1"></div>
@@ -412,7 +420,6 @@
         <div class="b-cell track"            id="c-8-12"></div>
         <div class="b-cell track safe-yellow" id="c-8-13"></div>
         <div class="b-cell track"            id="c-8-14"></div>
-
         <!-- ── ROW 9 ── -->
         <div class="b-cell zone-green"   id="c-9-0"></div>
         <div class="b-cell zone-green"   id="c-9-1"></div>
@@ -429,7 +436,6 @@
         <div class="b-cell zone-yellow"  id="c-9-12"></div>
         <div class="b-cell zone-yellow"  id="c-9-13"></div>
         <div class="b-cell zone-yellow"  id="c-9-14"></div>
-
         <!-- ── ROW 10 ── -->
         <div class="b-cell zone-green"   id="c-10-0"></div>
         <div class="b-cell home-inner green-inner" id="c-10-1"></div>
@@ -446,7 +452,6 @@
         <div class="b-cell home-inner yellow-inner" id="c-10-12"></div>
         <div class="b-cell home-inner yellow-inner" id="c-10-13"></div>
         <div class="b-cell zone-yellow"  id="c-10-14"></div>
-
         <!-- ── ROW 11 ── -->
         <div class="b-cell zone-green"   id="c-11-0"></div>
         <div class="b-cell home-inner green-inner" id="c-11-1"></div>
@@ -463,7 +468,6 @@
         <div class="b-cell home-inner yellow-inner" id="c-11-12"></div>
         <div class="b-cell home-inner yellow-inner" id="c-11-13"></div>
         <div class="b-cell zone-yellow"  id="c-11-14"></div>
-
         <!-- ── ROW 12 ── -->
         <div class="b-cell zone-green"   id="c-12-0"></div>
         <div class="b-cell home-inner green-inner" id="c-12-1"></div>
@@ -480,7 +484,6 @@
         <div class="b-cell home-inner yellow-inner" id="c-12-12"></div>
         <div class="b-cell home-inner yellow-inner" id="c-12-13"></div>
         <div class="b-cell zone-yellow"  id="c-12-14"></div>
-
         <!-- ── ROW 13 ── -->
         <div class="b-cell zone-green"   id="c-13-0"></div>
         <div class="b-cell home-inner green-inner" id="c-13-1"></div>
@@ -497,7 +500,6 @@
         <div class="b-cell home-inner yellow-inner" id="c-13-12"></div>
         <div class="b-cell home-inner yellow-inner" id="c-13-13"></div>
         <div class="b-cell zone-yellow"  id="c-13-14"></div>
-
         <!-- ── ROW 14 ── -->
         <div class="b-cell zone-green"   id="c-14-0"></div>
         <div class="b-cell zone-green"   id="c-14-1"></div>
@@ -514,117 +516,101 @@
         <div class="b-cell zone-yellow"  id="c-14-12"></div>
         <div class="b-cell zone-yellow"  id="c-14-13"></div>
         <div class="b-cell zone-yellow"  id="c-14-14"></div>
-
-        <!-- HOME SQUARES inside corner zones (previously circles — see room.css) -->
         <div class="home-circle hc-red"    id="hc-red"></div>
         <div class="home-circle hc-blue"   id="hc-blue"></div>
         <div class="home-circle hc-green"  id="hc-green"></div>
         <div class="home-circle hc-yellow" id="hc-yellow"></div>
 
-        <!-- PLAYER NAME LABELS — sit on the outer edge of each corner zone,
-             beside/above that color's home circle, showing who is playing
-             that color. Filled in by updateHomeLabels() in room.js. -->
-        <div class="home-name-label label-red"    id="home-name-red"></div>
-        <div class="home-name-label label-blue"   id="home-name-blue"></div>
-        <div class="home-name-label label-green"  id="home-name-green"></div>
-        <div class="home-name-label label-yellow" id="home-name-yellow"></div>
 
-        <!-- TOKEN SLOTS inside home circles (absolute positioned by JS) -->
-        <!-- Red tokens -->
-        <div class="token red" id="player1-t1"></div>
-        <div class="token red" id="player1-t2"></div>
-        <div class="token red" id="player1-t3"></div>
-        <div class="token red" id="player1-t4"></div>
-        <!-- Blue tokens -->
-        <div class="token blue" id="player2-t1"></div>
-        <div class="token blue" id="player2-t2"></div>
-        <div class="token blue" id="player2-t3"></div>
-        <div class="token blue" id="player2-t4"></div>
-        <!-- Green tokens -->
-        <div class="token green" id="player3-t1"></div>
-        <div class="token green" id="player3-t2"></div>
-        <div class="token green" id="player3-t3"></div>
-        <div class="token green" id="player3-t4"></div>
-        <!-- Yellow tokens -->
-        <div class="token yellow" id="player4-t1"></div>
-        <div class="token yellow" id="player4-t2"></div>
-        <div class="token yellow" id="player4-t3"></div>
-        <div class="token yellow" id="player4-t4"></div>
+        <!-- tokens are moved between cells by room.js -->
+        <div class="token red" id="player1-t1" role="button" aria-label="Red token 1" aria-disabled="true"></div>
+        <div class="token red" id="player1-t2" role="button" aria-label="Red token 2" aria-disabled="true"></div>
+        <div class="token red" id="player1-t3" role="button" aria-label="Red token 3" aria-disabled="true"></div>
+        <div class="token red" id="player1-t4" role="button" aria-label="Red token 4" aria-disabled="true"></div>
+        <div class="token blue" id="player2-t1" role="button" aria-label="Blue token 1" aria-disabled="true"></div>
+        <div class="token blue" id="player2-t2" role="button" aria-label="Blue token 2" aria-disabled="true"></div>
+        <div class="token blue" id="player2-t3" role="button" aria-label="Blue token 3" aria-disabled="true"></div>
+        <div class="token blue" id="player2-t4" role="button" aria-label="Blue token 4" aria-disabled="true"></div>
+        <div class="token green" id="player3-t1" role="button" aria-label="Green token 1" aria-disabled="true"></div>
+        <div class="token green" id="player3-t2" role="button" aria-label="Green token 2" aria-disabled="true"></div>
+        <div class="token green" id="player3-t3" role="button" aria-label="Green token 3" aria-disabled="true"></div>
+        <div class="token green" id="player3-t4" role="button" aria-label="Green token 4" aria-disabled="true"></div>
+        <div class="token yellow" id="player4-t1" role="button" aria-label="Yellow token 1" aria-disabled="true"></div>
+        <div class="token yellow" id="player4-t2" role="button" aria-label="Yellow token 2" aria-disabled="true"></div>
+        <div class="token yellow" id="player4-t3" role="button" aria-label="Yellow token 3" aria-disabled="true"></div>
+        <div class="token yellow" id="player4-t4" role="button" aria-label="Yellow token 4" aria-disabled="true"></div>
 
-    </div><!-- #ludo-board -->
+      </div><!-- #ludo-board -->
 
-</div><!-- #board-wrap -->
-
-<!-- Leave Game button below the board -->
-<div class="board-actions">
-    <button class="btn-leave btn-leave--ingame" id="leave-game-btn-bottom" type="button">Leave Game</button>
-</div>
+    </div>
+  </div>
 
 </div><!-- #game-container -->
 
-<!-- ╔════════ RESULT / RANKING POPUP ════════╗
-     Hidden by default; shown/filled in by room.js whenever a
-     player finishes all 4 tokens. -->
-<div class="modal-overlay" id="result-modal" style="display:none;">
-    <div class="modal-card">
-        <div class="modal-icon" id="modal-icon">🏆</div>
-        <h2 class="modal-title" id="modal-title">Player Won!</h2>
-        <div class="modal-ranking" id="modal-ranking"></div>
-        <button class="btn-modal-continue" id="modal-continue-btn" type="button">Continue Game</button>
-        <button class="btn-modal-leave" id="modal-leave-btn" type="button">Leave Game</button>
+<!-- ╔════════ RESULT / RANKING POPUP ════════╗ -->
+<div class="modal-overlay" id="result-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-card">
+    <div class="modal-icon" id="modal-icon" data-kind="trophy" aria-hidden="true"></div>
+    <h2 class="modal-title" id="modal-title">Player won!</h2>
+    <div class="modal-ranking" id="modal-ranking"></div>
+    <button class="btn btn--primary btn--block" id="modal-continue-btn" type="button">Continue playing</button>
+    <button class="btn btn--danger btn--block" id="modal-leave-btn" type="button">Leave game</button>
+  </div>
+</div>
+
+<!-- ╔════════ CONFIRM LEAVE MODAL ════════╗ -->
+<div class="modal-overlay" id="confirm-leave-modal" style="display:none;" role="alertdialog" aria-modal="true" aria-labelledby="leave-title" aria-describedby="leave-desc">
+  <div class="modal-card modal-card--compact">
+    <div class="modal-icon" data-kind="exit" aria-hidden="true"></div>
+    <h2 class="modal-title" id="leave-title">Leave this room?</h2>
+    <p class="modal-desc" id="leave-desc">You'll lose your seat and your tokens won't be on the board anymore.</p>
+    <div class="modal-btn-row">
+      <button class="btn btn--secondary" id="confirm-leave-no-btn" type="button">Stay</button>
+      <button class="btn btn--danger" id="confirm-leave-yes-btn" type="button">Leave room</button>
     </div>
+  </div>
 </div>
 
 <!-- ╔════════ LIVE ROOM CHAT ════════╗
-     Real-time chat scoped to this room's code (rooms/ROOM_CODE/chat).
-     Visible from the moment the page loads — readable in the waiting
-     room, not just once the game starts. Sending a message requires
-     having actually joined a seat (enforced in room.js/sendMessage()).
-     All wiring — listeners, send/receive, rate limiting, validation,
-     auto-scroll, unread badge — lives in room.js under the "LIVE TEXT
-     CHAT SYSTEM" section. Nothing here touches the game/board markup
-     above. -->
-
-<button class="chat-toggle-btn" id="chat-toggle-btn" type="button" aria-label="Open chat">
-    💬
-    <span class="chat-unread-badge" id="chat-unread-badge"></span>
+     Realtime chat at rooms/ROOM_CODE/chat. Wiring (listeners, send/receive,
+     rate-limit, unread badge) lives in room.js under "LIVE TEXT CHAT SYSTEM". -->
+<button class="chat-toggle-btn" id="chat-toggle-btn" type="button" aria-label="Open chat" aria-controls="chat-panel" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-4.6A8 8 0 1 1 21 12z"/></svg>
+  <span class="chat-unread-badge" id="chat-unread-badge"></span>
 </button>
 
-<div class="chat-panel" id="chat-panel">
-    <div class="chat-panel__header">
-        <span class="chat-panel__title">💬 Room Chat</span>
-        <button class="chat-close-btn" id="chat-close-btn" type="button" aria-label="Close chat">✕</button>
-    </div>
+<div class="chat-backdrop" id="chat-backdrop"></div>
 
-    <div class="chat-messages" id="chat-messages"></div>
+<aside class="chat-panel" id="chat-panel" aria-label="Room chat">
+  <div class="chat-panel__header">
+    <span class="chat-panel__title">Room chat</span>
+    <button class="chat-close-btn" id="chat-close-btn" type="button" aria-label="Close chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
 
+  <div class="chat-messages" id="chat-messages" role="log" aria-live="polite" aria-label="Messages"></div>
+
+  <div class="chat-compose">
     <div class="chat-input-row">
-        <textarea
-            id="chat-input"
-            class="chat-input"
-            placeholder="Type a message…"
-            maxlength="200"
-            rows="1"
-        ></textarea>
-        <button class="chat-send-btn" id="chat-send-btn" type="button" aria-label="Send message">➤</button>
+      <textarea
+        id="chat-input"
+        class="chat-input"
+        placeholder="Message the room"
+        aria-label="Message"
+        maxlength="200"
+        rows="1"
+      ></textarea>
+      <button class="chat-send-btn" id="chat-send-btn" type="button" aria-label="Send message">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg>
+      </button>
     </div>
     <div class="chat-char-counter" id="chat-char-counter">0/200</div>
-</div>
+  </div>
+</aside>
+
+<div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
 
 <script type="module" src="room.js"></script>
-
-<!-- ╔════════ CONFIRM LEAVE MODAL ════════╗ -->
-<div class="modal-overlay" id="confirm-leave-modal" style="display:none;">
-    <div class="modal-card modal-card--compact">
-        <div class="modal-icon">⚠️</div>
-        <h2 class="modal-title">Leave Room?</h2>
-        <p class="modal-desc">Are you sure you want to leave? You will lose your seat in this game.</p>
-        <div class="modal-btn-row">
-            <button class="btn-modal-leave" id="confirm-leave-yes-btn" type="button">Yes, Leave</button>
-            <button class="btn-modal-continue" id="confirm-leave-no-btn" type="button">Stay</button>
-        </div>
-    </div>
-</div>
-
 </body>
 </html>
