@@ -1479,6 +1479,7 @@ setInterval(tickTurnTimer, 250);
 ========================================================= */
 
 let lastRoomSignature = null;
+let chatColorsRefreshed = false;
 
 onValue(roomRef, (snap) => {
     if (!snap.exists()) return;
@@ -1587,6 +1588,11 @@ onValue(roomRef, (snap) => {
                     : `Waiting for players (${count} of ${max})…`;
             }
         }
+    }
+
+    if (room.status === "playing" && !chatColorsRefreshed) {
+        chatColorsRefreshed = true;
+        refreshChatColors();
     }
 
     if (room.status === "playing" && room.game) {
@@ -2221,7 +2227,7 @@ function announcePlayerChanges(players) {
             const was = previousPlayers[slot];
             const now = players[slot];
             if (!was && now && slot !== mySlot) {
-                showToast(`${now.name} joined the room`, COLOR_MAP[slot]);
+                showToast(`${now.name} joined the room`, "default");
             } else if (was && !now && slot !== mySlot) {
                 showToast(`${was.name} left the room`, "default");
             }
@@ -2497,7 +2503,9 @@ function buildChatRow(data, id, mySlot, keepPinned) {
     if (!isMine) {
         const nameEl = document.createElement("div");
         nameEl.className = "chat-bubble__name";
-        nameEl.style.color = `var(--${COLOR_MAP[data.sender] || "text"})`;
+        nameEl.dataset.colorSlot = data.sender || "";
+        nameEl.dataset.colorFallback = "text";
+        nameEl.style.color = senderColorVar(data.sender, "text");
         nameEl.textContent = data.playerName || "Player";
         bubble.appendChild(nameEl);
     }
@@ -2600,12 +2608,27 @@ function buildGifImg(gif, keepPinned) {
     return img;
 }
 
+/* Seat colours are a secret until the game starts. */
+function colorsRevealed() { return latestRoom?.status === "playing"; }
+function senderColorVar(slot, fallback) {
+    return colorsRevealed() && COLOR_MAP[slot] ? `var(--${COLOR_MAP[slot]})` : `var(--${fallback})`;
+}
+function refreshChatColors() {
+    document.querySelectorAll("[data-color-slot]").forEach(el => {
+        const c = senderColorVar(el.dataset.colorSlot, el.dataset.colorFallback || "text");
+        if (el.classList.contains("chat-quote")) el.style.setProperty("--qc", c);
+        else el.style.color = c;
+    });
+}
+
 function buildQuote(reply) {
     const q = document.createElement("button");
     q.type = "button";
     q.className = "chat-quote";
     q.dataset.replyId = reply.id;
-    q.style.setProperty("--qc", `var(--${COLOR_MAP[reply.sender] || "accent"})`);
+    q.dataset.colorSlot = reply.sender || "";
+    q.dataset.colorFallback = "accent";
+    q.style.setProperty("--qc", senderColorVar(reply.sender, "accent"));
 
     if (reply.gif) {
         const src = safeMediaUrl(chatMessages.get(reply.id)?.data?.gif?.url);

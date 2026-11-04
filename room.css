@@ -2148,3 +2148,38 @@ body.turn-yellow #ludo-board::after { bottom: 0; right: 0; border-top-left-radiu
 .gif-picker__item:focus-visible { outline: 2px solid var(--accent); }
 .gif-picker__msg { column-span: all; padding: 18px 8px; text-align: center; color: var(--text-2); font-size: 0.85rem; }
 .gif-picker__foot { text-align: center; color: var(--text-2); font-size: 0.7rem; letter-spacing: 0.04em; }
+
+
+/* ================================================================
+   LOBBY: seat colours are hidden until the game starts.
+   Every seat just flickers through all four colours (out of step
+   and at different speeds, so no seat reveals which colour is its).
+   ================================================================ */
+@keyframes seatFlicker {
+  0%   { --c: var(--red); --c-rgb: var(--red-rgb); }
+  25%  { --c: var(--blue); --c-rgb: var(--blue-rgb); }
+  50%  { --c: var(--green); --c-rgb: var(--green-rgb); }
+  75%  { --c: var(--yellow); --c-rgb: var(--yellow-rgb); }
+  100% { --c: var(--red); --c-rgb: var(--red-rgb); }
+}
+
+.player-slot .avatar { --c: inherit; --c-rgb: inherit; }
+
+.player-slot { animation: seatFlicker 2.4s steps(1, end) infinite; }
+#player1-slot { animation-duration: 2.8s; animation-delay: -1.3s; }
+#player2-slot { animation-duration: 2.0s; animation-delay: -0.2s; }
+#player3-slot { animation-duration: 3.2s; animation-delay: -2.1s; }
+#player4-slot { animation-duration: 2.4s; animation-delay: -0.9s; }
+
+.player-slot--filled {
+  animation: seatIn 360ms cubic-bezier(.2, .9, .3, 1.1), seatFlicker 2.4s steps(1, end) infinite;
+}
+#player1-slot.player-slot--filled { animation-duration: 360ms, 2.8s; animation-delay: 0s, -1.3s; }
+#player2-slot.player-slot--filled { animation-duration: 360ms, 2.0s; animation-delay: 0s, -0.2s; }
+#player3-slot.player-slot--filled { animation-duration: 360ms, 3.2s; animation-delay: 0s, -2.1s; }
+#player4-slot.player-slot--filled { animation-duration: 360ms, 2.4s; animation-delay: 0s, -0.9s; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* no flicker: a neutral colour so nothing is revealed */
+  .player-slot, .player-slot--filled { animation: none !important; --c: var(--accent); --c-rgb: var(--accent-rgb); }
+}
