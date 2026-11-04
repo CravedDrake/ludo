@@ -614,8 +614,23 @@
       </button>
     </div>
 
+    <!-- GIPHY picker -->
+    <div class="gif-picker" id="gif-picker" hidden>
+      <div class="gif-picker__head">
+        <input id="gif-search" class="gif-picker__search" type="search" placeholder="Search GIPHY" aria-label="Search GIFs" autocomplete="off" maxlength="60" />
+        <button class="chat-mini-btn" id="gif-close" type="button" aria-label="Close GIF picker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="gif-picker__grid" id="gif-grid" role="listbox" aria-label="GIF results"></div>
+      <div class="gif-picker__foot">Powered by GIPHY</div>
+    </div>
+
     <div class="chat-input-row">
-      <button class="chat-attach-btn" id="chat-attach-btn" type="button" aria-label="Add a GIF or image" title="Add a GIF or image (you can also paste or drag one in)">
+      <button class="chat-attach-btn" id="chat-attach-btn" type="button" aria-label="Upload an image or GIF" title="Upload an image or GIF (you can also paste or drag one in)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 9"/></svg>
+      </button>
+      <button class="chat-attach-btn" id="gif-btn" type="button" aria-label="Search GIFs" title="Search GIFs">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M8.5 10.2H7.2a1.2 1.2 0 0 0-1.2 1.2v1.2a1.2 1.2 0 0 0 1.2 1.2h1.3v-1.2H7.8M11.2 10v4M13.6 14v-4h2M13.6 12h1.6"/></svg>
       </button>
       <textarea

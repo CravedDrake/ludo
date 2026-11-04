@@ -2932,11 +2932,108 @@ async function stageGifFile(file) {
     await showPendingGif({ file, previewUrl, w, h });
 }
 
-async function stageRemoteGif(url) {
+async function stageRemoteGif(url, knownW, knownH) {
     if (!getMySlot()) { showToast("Join the room to send GIFs", "error"); return; }
-    const { w, h } = await readImageSize(url);
+    const { w, h } = (knownW && knownH) ? { w: knownW, h: knownH } : await readImageSize(url);
     await showPendingGif({ file: null, remoteUrl: url, previewUrl: url, w, h });
 }
+
+/* ---------- GIPHY picker ---------- */
+
+const GIPHY_API_KEY = "H40HTtbZHVG46GycyxgV5UvCYlcQSEoI";
+const GIPHY_PAGE    = 24;
+
+const gifBtn    = document.getElementById("gif-btn");
+const gifPicker = document.getElementById("gif-picker");
+const gifSearch = document.getElementById("gif-search");
+const gifGrid   = document.getElementById("gif-grid");
+const gifClose  = document.getElementById("gif-close");
+
+let gifQuery = "", gifOffset = 0, gifLoading = false, gifDone = false, gifReq = 0, gifTimer = null;
+
+function gifMsg(text) {
+    const d = document.createElement("div");
+    d.className = "gif-picker__msg";
+    d.textContent = text;
+    return d;
+}
+
+async function loadGifs(reset) {
+    if (!gifGrid || gifLoading && !reset) return;
+    if (reset) { gifOffset = 0; gifDone = false; gifGrid.textContent = ""; gifGrid.scrollTop = 0; }
+    if (gifDone) return;
+    const req = ++gifReq;
+    gifLoading = true;
+
+    const q = gifQuery.trim();
+    const url = new URL(`https://api.giphy.com/v1/gifs/${q ? "search" : "trending"}`);
+    url.searchParams.set("api_key", GIPHY_API_KEY);
+    url.searchParams.set("limit", String(GIPHY_PAGE));
+    url.searchParams.set("offset", String(gifOffset));
+    url.searchParams.set("rating", "pg-13");
+    if (q) url.searchParams.set("q", q);
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("GIPHY " + res.status);
+        const json = await res.json();
+        if (req !== gifReq) return; // a newer search replaced this one
+
+        const items = json.data || [];
+        gifOffset += items.length;
+        if (items.length < GIPHY_PAGE) gifDone = true;
+
+        items.forEach(g => {
+            const small = g.images?.fixed_width_small || g.images?.fixed_width;
+            const sent  = g.images?.fixed_width || g.images?.downsized;
+            if (!small?.url || !sent?.url || !safeMediaUrl(sent.url)) return;
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "gif-picker__item";
+            b.setAttribute("role", "option");
+            b.setAttribute("aria-label", g.title || "GIF");
+            const img = document.createElement("img");
+            img.loading = "lazy";
+            img.alt = g.title || "GIF";
+            img.src = small.url;
+            if (small.width && small.height) { img.width = +small.width; img.height = +small.height; }
+            b.appendChild(img);
+            b.addEventListener("click", async () => {
+                closeGifPicker();
+                // stage it, then send straight away — no extra tap on Send
+                await stageRemoteGif(sent.url, +sent.width || 0, +sent.height || 0);
+                if (pendingGif) sendMessage();
+            });
+            gifGrid.appendChild(b);
+        });
+
+        if (!gifGrid.children.length) gifGrid.appendChild(gifMsg(q ? "No GIFs found" : "No GIFs right now"));
+    } catch (err) {
+        console.error("GIPHY request failed:", err);
+        if (req === gifReq && !gifGrid.children.length) gifGrid.appendChild(gifMsg("Couldn't load GIFs. Check your connection."));
+    } finally {
+        if (req === gifReq) gifLoading = false;
+    }
+}
+
+function openGifPicker() {
+    if (!getMySlot()) { showToast("Join the room to send GIFs", "error"); return; }
+    gifPicker.hidden = false;
+    if (!gifGrid.children.length) loadGifs(true);
+    gifSearch?.focus({ preventScroll: true });
+}
+function closeGifPicker() { if (gifPicker) gifPicker.hidden = true; }
+
+gifBtn?.addEventListener("click", () => gifPicker.hidden ? openGifPicker() : closeGifPicker());
+gifClose?.addEventListener("click", closeGifPicker);
+gifSearch?.addEventListener("input", () => {
+    clearTimeout(gifTimer);
+    gifTimer = setTimeout(() => { gifQuery = gifSearch.value; loadGifs(true); }, 350);
+});
+gifSearch?.addEventListener("keydown", (e) => { if (e.key === "Escape") closeGifPicker(); });
+gifGrid?.addEventListener("scroll", () => {
+    if (gifGrid.scrollTop + gifGrid.clientHeight > gifGrid.scrollHeight - 120) loadGifs(false);
+});
 
 chatAttachBtn?.addEventListener("click", () => chatFileInput?.click());
 chatFileInput?.addEventListener("change", () => {

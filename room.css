@@ -1596,6 +1596,30 @@ body.turn-yellow #ludo-board::after { bottom: 0; right: 0; border-top-left-radiu
   .btn-leave--ingame { grid-area: leave; }
 }
 
+/* ---- phone polish: aligned header, full-width turn pill, centred board ---- */
+@media (max-width: 1023px) {
+  /* stage fills the leftover height and centres, instead of hugging the top
+     and leaving a dead band under the board */
+  .game-stage { flex: 1 1 auto; align-content: center; }
+}
+
+@media (max-width: 1023px) and (orientation: portrait) {
+  /* chat button + leave button share the same top edge and size */
+  .chat-toggle-btn { top: 10px; right: 10px; }
+  .btn-leave--ingame { height: 44px; }
+  .game-bar { padding-right: 64px; }
+
+  /* the pill is allowed to stretch under the chat button column so it
+     lines up with the player panels (it was capped at 100% of its cell) */
+  .turn { max-width: none; margin-right: -54px; }
+
+  /* sit slightly above true centre so spare height falls mostly below */
+}
+
+@media (max-width: 1023px) and (orientation: portrait) and (min-height: 760px) {
+  .game-stage { padding-bottom: 22dvh; }
+}
+
 /* ---- small phones ---- */
 @media (max-width: 480px) {
   .lobby { padding-left: 16px; padding-right: 16px; }
@@ -1777,6 +1801,18 @@ body.turn-yellow #ludo-board::after { bottom: 0; right: 0; border-top-left-radiu
   #panel-player1, #panel-player2 { align-self: start; }
   #panel-player3, #panel-player4 { align-self: end; }
   .pp .dice-box { align-self: flex-end; }
+
+  /* compact side panels so all four fit without scrolling */
+  .pp { flex-direction: row; align-items: center; gap: 8px; width: min(100%, 210px); padding: 6px 8px; }
+  .pp .avatar { width: 30px; height: 30px; font-size: 0.82rem; flex: none; }
+  .pp__text { min-width: 0; flex: 1; }
+  .pp__name { font-size: 0.82rem; }
+  .pp--mine .pp__name::after { display: none; }
+  .pp .dice-box { --die-size: 24px; width: 46px; height: 46px; align-self: center; flex: none; }
+
+  /* chat button lines up with the Leave button */
+  .chat-toggle-btn { top: 9px; right: 10px; width: 40px; height: 40px; }
+  .game-bar { padding-right: 60px; }
 }
 
 
@@ -2057,3 +2093,58 @@ body.turn-yellow #ludo-board::after { bottom: 0; right: 0; border-top-left-radiu
 }
 
 .chat-drop.is-on { display: grid; }
+
+
+/* ================================================================
+   GIPHY PICKER
+   ================================================================ */
+.gif-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: min(300px, 42dvh);
+  margin-bottom: 8px;
+  padding: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.gif-picker[hidden] { display: none; }
+.gif-picker__head { display: flex; align-items: center; gap: 8px; }
+.gif-picker__search {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* stops iOS zoom-on-focus */
+}
+.gif-picker__search:focus { outline: none; border-color: var(--accent); }
+.gif-picker__grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  columns: 3;
+  column-gap: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+.gif-picker__item {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 0;
+  background: var(--surface);
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  break-inside: avoid;
+  cursor: pointer;
+}
+.gif-picker__item img { display: block; width: 100%; height: auto; }
+.gif-picker__item:focus-visible { outline: 2px solid var(--accent); }
+.gif-picker__msg { column-span: all; padding: 18px 8px; text-align: center; color: var(--text-2); font-size: 0.85rem; }
+.gif-picker__foot { text-align: center; color: var(--text-2); font-size: 0.7rem; letter-spacing: 0.04em; }
