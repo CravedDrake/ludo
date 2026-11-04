@@ -1,16 +1,23 @@
-import { db } from "./firebase.js";
+import { db, storage } from "./firebase.js";
 import {
     ref,
     get,
     update,
     onValue,
     push,
+    set,
+    remove,
     onChildAdded,
+    onChildChanged,
     query,
     limitToLast
 } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-database.js";
+import {
+    ref as storageRef,
+    uploadBytesResumable,
+    getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 import { showToast, copyText } from "./ui.js";
-import { getCheatDice } from "./dev.js";
 
 /* =========================================================
    ROOM INIT — read code from URL
@@ -166,9 +173,9 @@ async function playDiceSound() {
     if (audioCtx && diceSoundBuffer) {
         // Mobile browsers suspend the AudioContext until a user gesture;
         // resume() here (called synchronously from the click handler) satisfies that.
-        if (audioCtx.state === "suspended") {
-            try { await audioCtx.resume(); } catch (e) { /* ignore — fallback below still works */ }
-        }
+        // Never await resume(): on a context that has no user gesture yet the
+        // promise can stay pending, which would stall whatever called us.
+        if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
         const source = audioCtx.createBufferSource();
         source.buffer = diceSoundBuffer;
         source.connect(audioCtx.destination);
@@ -229,9 +236,7 @@ captureSoundFallback.preload = "auto";
 
 async function playCaptureSound() {
     if (audioCtx && captureSoundBuffer) {
-        if (audioCtx.state === "suspended") {
-            try { await audioCtx.resume(); } catch (e) { /* ignore */ }
-        }
+        if (audioCtx.state === "suspended") { audioCtx.resume().catch(() => {}); return; }
         const source = audioCtx.createBufferSource();
         source.buffer = captureSoundBuffer;
         source.connect(audioCtx.destination);
@@ -264,9 +269,7 @@ homeSoundFallback.preload = "auto";
 
 async function playHomeSound() {
     if (audioCtx && homeSoundBuffer) {
-        if (audioCtx.state === "suspended") {
-            try { await audioCtx.resume(); } catch (e) { /* ignore */ }
-        }
+        if (audioCtx.state === "suspended") { audioCtx.resume().catch(() => {}); return; }
         const source = audioCtx.createBufferSource();
         source.buffer = homeSoundBuffer;
         source.connect(audioCtx.destination);
@@ -279,9 +282,9 @@ async function playHomeSound() {
 
 async function playTapSound() {
     if (audioCtx && tapSoundBuffer) {
-        if (audioCtx.state === "suspended") {
-            try { await audioCtx.resume(); } catch (e) { /* ignore — fallback below still works */ }
-        }
+        // Tap sounds fire mid-animation: if audio isn't unlocked yet, skip the
+        // tap (and try to unlock) instead of queueing a burst of old taps.
+        if (audioCtx.state === "suspended") { audioCtx.resume().catch(() => {}); return; }
         const source = audioCtx.createBufferSource();
         source.buffer = tapSoundBuffer;
         source.connect(audioCtx.destination);
@@ -506,11 +509,13 @@ function getCellEl(coord) {
     return document.getElementById(`c-${coord[0]}-${coord[1]}`);
 }
 
-/* Seats are handed out in lobby order. The lobby colours are only a
-   flicker — the REAL colours are shuffled when the host starts the
-   game (see shuffleColors / the Start Game handler).
-   - 2-player rooms: second seat is player4 (diagonal to player1).
-   - Otherwise: player2, then player3, then player4. */
+/* `maxPlayers` determines which seats are handed out.
+   - Default (4, or unset): fills player2, then player3, then player4.
+   - 2-player rooms: skip straight to player4 — the second seat is
+     the corner DIAGONALLY OPPOSITE player1's red corner (top-left),
+     i.e. the yellow bottom-right corner, instead of the adjacent
+     blue top-right corner. player2/player3 are never assigned in
+     this mode, so their seats/UI simply stay empty/hidden. */
 function getNextPlayerSlot(players = {}, maxPlayers = 4) {
     if (maxPlayers === 2) {
         if (!players.player4) return "player4";
@@ -520,28 +525,6 @@ function getNextPlayerSlot(players = {}, maxPlayers = 4) {
     if (!players.player3) return "player3";
     if (!players.player4) return "player4";
     return null;
-}
-
-const OPPOSITE_SLOT = { player1: "player4", player4: "player1", player2: "player3", player3: "player2" };
-
-function shuffleArray(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-}
-
-/* Picks a random colour (board corner) for each lobby player.
-   2-player rooms get diagonally opposite corners. */
-function pickRandomSlots(count, maxPlayers) {
-    const all = ["player1", "player2", "player3", "player4"];
-    if (maxPlayers === 2 && count === 2) {
-        const first = all[Math.floor(Math.random() * 4)];
-        return shuffleArray([first, OPPOSITE_SLOT[first]]);
-    }
-    return shuffleArray(all).slice(0, count);
 }
 
 /* Skips any slot already listed in `finished` (players who have
@@ -830,15 +813,11 @@ async function joinRoom() {
             return;
         }
 
-        const playerId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random();
-        sessionStorage.setItem("playerId", playerId);
-
         await update(roomRef, {
             [`players/${slot}`]: {
                 name,
                 color: COLOR_MAP[slot],
                 isHost: false,
-                pid: playerId,
                 joinedAt: Date.now()
             }
         });
@@ -872,21 +851,13 @@ startGameBtn?.addEventListener("click", async () => {
     const room = latestRoom;
     if (!room) return;
 
-    const lobbyPlayers = room.players || {};
-    const turnOrder    = room.turnOrder || ["player1", "player2", "player3", "player4"];
-    const lobbyActive  = turnOrder.filter(s => lobbyPlayers[s]);
-
-    // Random colours: re-seat every player onto a random board corner.
-    const targets = pickRandomSlots(lobbyActive.length, room.maxPlayers);
-    const players = {};
-    lobbyActive.forEach((oldSlot, i) => {
-        players[targets[i]] = { ...lobbyPlayers[oldSlot], color: COLOR_MAP[targets[i]] };
-    });
+    const players   = room.players || {};
+    const turnOrder = room.turnOrder || ["player1", "player2", "player3", "player4"];
     const active    = turnOrder.filter(s => players[s]);
+
     const firstTurn = active[Math.floor(Math.random() * active.length)];
 
     await update(roomRef, {
-        players,
         status:                "playing",
         "game/currentTurn":    firstTurn,
         "game/diceValue":      0,
@@ -1003,11 +974,31 @@ function finalizeRoll(mySlot) {
         return;
     }
 
+    // Only one token can legally move? Nothing to choose — play it the
+    // instant the dice finish, in a single write (no "diceRolled" round-trip,
+    // no delay).
+    const legal = legalTokenKeys(dice, game.tokens[mySlot]);
+    if (legal.length === 1) {
+        performMove(mySlot, legal[0], { ...room, game: { ...game, diceValue: dice } })
+            .catch(err => console.error("Failed to auto-move only playable token:", err));
+        return;
+    }
+
     update(roomRef, {
         "game/rolling":    null,
         "game/diceValue":  dice,
         "game/diceRolled": true
     }).catch(err => console.error("Failed to sync roll result:", err));
+}
+
+/* Tokens that have a legal move for this roll. */
+function legalTokenKeys(dice, tokens) {
+    const keys = [];
+    for (const key in tokens) {
+        const idx = tokens[key].index;
+        if ((idx === -1 && dice === 6) || (idx >= 0 && idx !== 56 && idx + dice <= 56)) keys.push(key);
+    }
+    return keys;
 }
 
 /* =========================================================
@@ -1039,7 +1030,7 @@ async function handleDiceClick(slot) {
     if (game.gameOver)                        return;
     if (game.rolling && game.rolling.slot)    return; // a roll is already in flight
 
-    const dice = getCheatDice() ?? (Math.floor(Math.random() * 6) + 1);
+    const dice = Math.floor(Math.random() * 6) + 1;
 
     try {
         await update(roomRef, {
@@ -1205,6 +1196,7 @@ if (tokenJustFinished) {
     const moveUpdates = {
         ...captureUpdates,
         [`game/tokens/${player}/${tokenKey}/index`]: index,
+        "game/rolling":       null,
         "game/diceValue":     0,
         "game/diceRolled":    false,
         "game/currentTurn":   nextTurn,
@@ -1302,11 +1294,14 @@ function updateTimerBadges(currentTurn, remaining, gameOver) {
         const box = diceBoxes[slot];
 
         if (isActive) {
-            badge.textContent = String(Math.max(0, remaining));
-            badge.classList.toggle("dice-timer--warning", remaining <= 10);
-            if (box) {
-                box.style.setProperty("--pct", String(Math.max(0, Math.min(1, remaining / TURN_SECONDS))));
-                box.classList.toggle("dice-box--timer-low", remaining <= 10);
+            const shown = String(Math.max(0, remaining));
+            if (badge.textContent !== shown) {
+                badge.textContent = shown;
+                badge.classList.toggle("dice-timer--warning", remaining <= 10);
+                if (box) {
+                    box.style.setProperty("--pct", String(Math.max(0, Math.min(1, remaining / TURN_SECONDS))));
+                    box.classList.toggle("dice-box--timer-low", remaining <= 10);
+                }
             }
         } else {
             badge.classList.remove("dice-timer--warning");
@@ -1483,24 +1478,27 @@ setInterval(tickTurnTimer, 250);
    REALTIME SYNC — main listener
 ========================================================= */
 
+let lastRoomSignature = null;
+
 onValue(roomRef, (snap) => {
     if (!snap.exists()) return;
 
     const room    = snap.val();
     const players = room.players || {};
-
-    // Colours are shuffled at game start, so my seat may have changed:
-    // find myself again by my player id.
-    const myPid = sessionStorage.getItem("playerId");
-    if (myPid) {
-        const found = Object.keys(players).find(s => players[s] && players[s].pid === myPid);
-        if (found && found !== getMySlot()) sessionStorage.setItem("playerSlot", found);
-    }
     const mySlot  = getMySlot();
 
     latestRoom    = room;
     latestGame    = room.game || null;
     latestPlayers = players;
+
+    // Chat lives under this same room node, so every chat message, GIF and
+    // reaction fires this listener. Re-running the whole game UI for those
+    // was wasted work (and a source of hitching mid-animation) — skip the
+    // event when nothing but chat changed.
+    const { chat: _chat, ...roomWithoutChat } = room;
+    const signature = mySlot + "|" + JSON.stringify(roomWithoutChat);
+    if (signature === lastRoomSignature) return;
+    lastRoomSignature = signature;
 
     // =========================================================
     // GLOBAL GAME SOUND SYNC
@@ -1532,8 +1530,6 @@ onValue(roomRef, (snap) => {
     // seats everywhere at once.
     mode2p = room.maxPlayers === 2;
     document.body.classList.toggle("mode-2p", mode2p);
-    // which diagonal pair is in play (red/yellow = 14, blue/green = 23)
-    document.body.classList.toggle("pair-23", mode2p && !!(players.player2 || players.player3));
 
     announcePlayerChanges(players);
     updatePlayerSlots(players);
@@ -1896,44 +1892,79 @@ function getIntermediateCellId(player, index) {
     return null;
 }
 
-function hopTokenToCell(el, destCell, durationMs) {
+/* Moves a token along `cells` (in order) as ONE continuous animation.
+
+   Old approach: one animation per cell, each re-measuring the DOM
+   (getBoundingClientRect before + after appendChild = forced layout)
+   and each easing in/out, so the token visibly stopped and started on
+   every square, and every square waited on an audio promise.
+
+   Now: measure everything once, re-parent the token into its final
+   cell, then run two compositor-only animations on it —
+     • `translate`  : constant-speed glide through every square
+     • `transform`  : the little hop arc, repeated once per square
+   Neither touches layout or paint, so it stays at full frame rate on
+   phones even while Firebase updates are arriving. */
+function glideTokenAlong(el, cells, stepMs) {
     return new Promise((resolve) => {
-        if (!el || !destCell) { resolve(); return; }
+        const finalCell = cells[cells.length - 1];
+        if (!el || !finalCell) { resolve(); return; }
 
+        // ---- reads (batched) ----
         const startRect = el.getBoundingClientRect();
-        destCell.appendChild(el);
-        const endRect = el.getBoundingClientRect();
+        const centers   = cells.map(c => {
+            const r = c.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        });
+        const end = centers[centers.length - 1];
+        const startX = startRect.left + startRect.width / 2;
+        const startY = startRect.top  + startRect.height / 2;
 
-        const dx = startRect.left - endRect.left;
-        const dy = startRect.top  - endRect.top;
+        // ---- write ----
+        finalCell.appendChild(el);
 
-        if (!dx && !dy) { resolve(); return; }
+        const steps = cells.length;
+        const total = steps * stepMs;
+        const lift  = Math.max(10, Math.min(startRect.width * 0.9, 18));
 
-        const hopHeight = Math.max(10, Math.min(startRect.width * 0.9, 18));
-        el.style.zIndex = "40";
+        const path = [{ translate: `${startX - end.x}px ${startY - end.y}px`, offset: 0 }];
+        centers.forEach((c, i) => {
+            path.push({ translate: `${c.x - end.x}px ${c.y - end.y}px`, offset: (i + 1) / steps });
+        });
 
+        el.style.zIndex     = "40";
+        el.style.willChange = "transform, translate";
+
+        let glide, arc;
         let settled = false;
         const settle = () => {
             if (settled) return;
             settled = true;
-            el.style.transform = "";
-            el.style.zIndex    = "";
+            try { glide && glide.cancel(); arc && arc.cancel(); } catch (e) { /* ignore */ }
+            el.style.zIndex     = "";
+            el.style.willChange = "";
             resolve();
         };
 
         try {
-            const anim = el.animate([
-                { transform: `translate(${dx}px, ${dy}px) scale(1)`,                             offset: 0   },
-                { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - hopHeight}px) scale(1.18)`,  offset: 0.5 },
-                { transform: "translate(0px, 0px) scale(1)",                                      offset: 1   }
-            ], { duration: durationMs, easing: "ease-in-out", fill: "forwards" });
-            anim.onfinish = settle;
+            glide = el.animate(path, { duration: total, easing: "linear" });
+            arc   = el.animate([
+                { transform: "translateY(0) scale(1)",                   easing: "cubic-bezier(.2,.7,.4,1)" },
+                { transform: `translateY(${-lift}px) scale(1.18)`,       easing: "cubic-bezier(.6,0,.8,.4)" },
+                { transform: "translateY(0) scale(1)" }
+            ], { duration: stepMs, iterations: steps });
+            glide.onfinish = settle;
         } catch (e) {
             settle();
             return;
         }
 
-        setTimeout(settle, durationMs + 100);
+        // tap sound on every landing — fire and forget, never awaited
+        for (let i = 1; i <= steps; i++) {
+            setTimeout(() => { playTapSound(); }, i * stepMs - 40);
+        }
+
+        setTimeout(settle, total + 150); // safety net
     });
 }
 
@@ -1941,27 +1972,20 @@ async function animateTokenHop(player, tokenKey, fromIndex, toIndex, finalCellId
     const el = document.getElementById(`${player}-${tokenKey}`);
     if (!el) return;
 
-    el.style.position = "";
-    el.style.top       = "";
-    el.style.left      = "";
-    el.style.width     = "";
-    el.style.height    = "";
+    // leave the stacked layout so measurements start from a clean state
+    el.style.transition = "none";
+    delete el.dataset.stk;
 
-    const steps = toIndex - fromIndex;
-
-    for (let i = 1; i <= steps; i++) {
-        const intermediateIndex = fromIndex + i;
-        const cellId = (intermediateIndex === toIndex)
-            ? finalCellId
-            : getIntermediateCellId(player, intermediateIndex);
-
-        const cell = cellId ? document.getElementById(cellId) : null;
-        if (!cell) continue;
-
-        await playTapSound();
-        await hopTokenToCell(el, cell, HOP_STEP_MS);
+    const cells = [];
+    for (let idx = fromIndex + 1; idx <= toIndex; idx++) {
+        const cellId = (idx === toIndex) ? finalCellId : getIntermediateCellId(player, idx);
+        const cell   = cellId ? document.getElementById(cellId) : null;
+        if (cell) cells.push(cell);
     }
 
+    if (cells.length) await glideTokenAlong(el, cells, HOP_STEP_MS);
+
+    el.style.transition = "";
     spreadStackedTokens();
 }
 
@@ -2048,43 +2072,25 @@ function renderTokens(game) {
 ========================================================= */
 
 function spreadStackedTokens() {
-    const parents = new Set();
+    // Group tokens by the cell they're in. Position/size for a stacked
+    // token comes from CSS (`.token[data-stk]` uses translate + scale),
+    // so this only flips an attribute — no layout properties are touched.
+    const groups = new Map();
     document.querySelectorAll(".token").forEach(t => {
-        if (t.parentElement) parents.add(t.parentElement);
+        const parent = t.parentElement;
+        if (!parent) return;
+        if (!groups.has(parent)) groups.set(parent, []);
+        groups.get(parent).push(t);
     });
 
-    const corners = [
-        { top: "6%",  left: "6%"  },
-        { top: "6%",  left: "50%" },
-        { top: "50%", left: "6%"  },
-        { top: "50%", left: "50%" }
-    ];
-
-    parents.forEach(parent => {
-        const tokens = Array.from(parent.children).filter(c => c.classList.contains("token"));
-
+    groups.forEach(tokens => {
         if (tokens.length <= 1) {
-            tokens.forEach(t => {
-                t.style.position = "";
-                t.style.top      = "";
-                t.style.left     = "";
-                t.style.width    = "";
-                t.style.height   = "";
-                t.style.zIndex   = "";
-            });
+            tokens.forEach(t => { if (t.dataset.stk !== undefined) delete t.dataset.stk; });
             return;
         }
-
-        parent.style.position = parent.style.position || "relative";
-
         tokens.forEach((t, i) => {
-            const corner = corners[i % corners.length];
-            t.style.position = "absolute";
-            t.style.top      = corner.top;
-            t.style.left     = corner.left;
-            t.style.width    = "44%";
-            t.style.height   = "44%";
-            t.style.zIndex   = String(10 + i);
+            const v = String(i % 4);
+            if (t.dataset.stk !== v) t.dataset.stk = v;
         });
     });
 }
@@ -2227,7 +2233,13 @@ function announcePlayerChanges(players) {
 window.handleTokenClick = handleTokenClick;
 
 /* =========================================================
-   LIVE TEXT CHAT SYSTEM
+   LIVE CHAT SYSTEM — text, GIFs, replies, reactions
+
+   Message shape at rooms/ROOM/chat/ID:
+     { sender, playerName, message, timestamp,
+       gif?:      { url, w, h, inline? }          // GIF / image
+       replyTo?:  { id, sender, playerName, text, gif }
+       reactions?: { player1: "😂", player3: "👍" } }   // one per player
 ========================================================= */
 
 const chatRef = ref(db, `rooms/${roomCode}/chat`);
@@ -2236,6 +2248,13 @@ const CHAT_HISTORY_LIMIT   = 100;
 const CHAT_RATE_LIMIT_MS   = 500;
 const CHAT_MAX_LENGTH      = 200;
 const CHAT_NEAR_BOTTOM_PX  = 80;
+
+const CHAT_GIF_MAX_BYTES    = 8 * 1024 * 1024;  // biggest file we'll upload
+const CHAT_GIF_INLINE_MAX   = 250 * 1024;       // fallback: embed in the message if Storage is unavailable
+const CHAT_GIF_MAX_W        = 240;
+const CHAT_GIF_MAX_H        = 300;
+const CHAT_UPLOAD_STALL_MS  = 8000;
+const REACTION_EMOJIS       = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 const chatToggleBtn   = document.getElementById("chat-toggle-btn");
 const chatPanel       = document.getElementById("chat-panel");
@@ -2246,6 +2265,18 @@ const chatSendBtn     = document.getElementById("chat-send-btn");
 const chatUnreadBadge = document.getElementById("chat-unread-badge");
 const chatCharCounter = document.getElementById("chat-char-counter");
 const chatBackdrop    = document.getElementById("chat-backdrop");
+
+const chatReplyBar    = document.getElementById("chat-reply-bar");
+const chatReplyName   = document.getElementById("chat-reply-name");
+const chatReplyText   = document.getElementById("chat-reply-text");
+const chatReplyCancel = document.getElementById("chat-reply-cancel");
+const chatAttachBtn   = document.getElementById("chat-attach-btn");
+const chatFileInput   = document.getElementById("chat-file-input");
+const chatAttachBox   = document.getElementById("chat-attach-preview");
+const chatAttachImg   = document.getElementById("chat-attach-img");
+const chatAttachRemove = document.getElementById("chat-attach-remove");
+const chatAttachProg  = document.getElementById("chat-attach-progress");
+const chatDropEl      = document.getElementById("chat-drop");
 
 /* On very wide screens the chat is docked beside the game (room.css),
    so it counts as "open" while a game is running. */
@@ -2259,18 +2290,107 @@ let chatIsOpen        = false;
 let chatUnreadCount   = 0;
 let lastMessageSentAt = 0;
 
+const chatMessages = new Map();   // id -> { data, row, reactionsEl }
+let chatReplyTarget = null;       // what the next message replies to
+let pendingGif      = null;       // { file | remoteUrl, previewUrl, w, h }
+let chatSending     = false;
+
+/* ---------- media safety ---------- */
+
+const MEDIA_HOSTS = [
+    /^media\d*\.giphy\.com$/,
+    /^i\.giphy\.com$/,
+    /^media\d*\.tenor\.com$/,
+    /^c\.tenor\.com$/,
+    /^i\.imgur\.com$/,
+    /^firebasestorage\.googleapis\.com$/
+];
+
+/* Only ever hand the <img> a URL we recognise — never arbitrary hosts. */
+function safeMediaUrl(url) {
+    if (typeof url !== "string") return null;
+    if (/^data:image\/(gif|png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url)) return url;
+    try {
+        const u = new URL(url);
+        if (u.protocol !== "https:") return null;
+        return MEDIA_HOSTS.some(re => re.test(u.hostname)) ? u.href : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/* If the whole message is just a GIF link (what phone keyboards often
+   insert), turn it into a real GIF. Tenor "view" pages can't be turned
+   into an image without their API, so those stay normal text. */
+function gifUrlFromText(text) {
+    const t = (text || "").trim();
+    if (!t || /\s/.test(t)) return null;
+
+    let u;
+    try { u = new URL(t); } catch (e) { return null; }
+    if (u.protocol !== "https:") return null;
+
+    if (/^(www\.)?giphy\.com$/.test(u.hostname)) {
+        const m = u.pathname.match(/^\/(?:gifs|stickers)\/(?:.*-)?([A-Za-z0-9]+)\/?$/);
+        return m ? `https://media.giphy.com/media/${m[1]}/giphy.gif` : null;
+    }
+
+    if (/^firebasestorage\.googleapis\.com$/.test(u.hostname)) return null; // our own uploads only via the picker
+    const safe = safeMediaUrl(u.href);
+    if (!safe) return null;
+    const looksLikeImage = /\.(gif|webp|png|jpe?g)$/i.test(u.pathname) || /giphy\.com$|tenor\.com$/.test(u.hostname);
+    return looksLikeImage ? safe : null;
+}
+
+function readImageSize(src) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = () => resolve({ w: 0, h: 0 });
+        img.src = src;
+    });
+}
+
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload  = () => resolve(fr.result);
+        fr.onerror = () => reject(fr.error);
+        fr.readAsDataURL(file);
+    });
+}
+
+/* ---------- subscribe ---------- */
+
 function loadRecentMessages() {
     return query(chatRef, limitToLast(CHAT_HISTORY_LIMIT));
 }
+
+let chatUnsubAdded   = null;
+let chatUnsubChanged = null;
 
 function initializeChat() {
     if (!chatMessagesEl) return;
 
     const chatQuery = loadRecentMessages();
 
-    chatUnsubscribe = onChildAdded(chatQuery, (snap) => {
+    chatUnsubAdded = onChildAdded(chatQuery, (snap) => {
         addMessage(snap.val(), snap.key);
     });
+
+    // reactions are written onto an existing message
+    chatUnsubChanged = onChildChanged(chatQuery, (snap) => {
+        const entry = chatMessages.get(snap.key);
+        if (!entry) return;
+        entry.data = snap.val() || entry.data;
+        renderReactions(entry);
+    });
+
+    chatUnsubscribe = () => {
+        if (chatUnsubAdded)   chatUnsubAdded();
+        if (chatUnsubChanged) chatUnsubChanged();
+        chatUnsubAdded = chatUnsubChanged = null;
+    };
 }
 
 function destroyChat() {
@@ -2300,62 +2420,267 @@ function formatChatTime(timestamp) {
     return `${hours}:${minutes} ${ampm}`;
 }
 
+/* ---------- rendering ---------- */
+
+/* Messages are queued and flushed once per frame. Joining a busy room
+   used to append up to 100 messages one at a time, each forcing a
+   layout (isChatNearBottom + scroll), which is a real hitch on phones. */
+let chatQueue        = [];
+let chatFlushPending = false;
+let chatHasRendered  = false;
+
 function addMessage(data, id) {
     if (!chatMessagesEl || !data) return;
+    chatQueue.push({ data, id });
+    if (!chatFlushPending) {
+        chatFlushPending = true;
+        requestAnimationFrame(flushChatQueue);
+    }
+}
 
+function flushChatQueue() {
+    chatFlushPending = false;
+    const batch = chatQueue;
+    chatQueue = [];
+    if (!batch.length) return;
+
+    const mySlot        = getMySlot();
     const wasNearBottom = isChatNearBottom();
-    const mySlot = getMySlot();
+    const wasRendered   = chatHasRendered;            // false for the initial history load
+    const animate       = wasRendered && batch.length <= 3;
+    const frag         = document.createDocumentFragment();
+    let   stick        = wasNearBottom;
+    let   unread       = 0;
 
-    let bubble;
+    for (const { data, id } of batch) {
+        const row = buildChatRow(data, id, mySlot, stick || !wasRendered || data.sender === mySlot);
+        if (animate) row.classList.add("chat-fade-in");
+        frag.appendChild(row);
 
-    if (data.sender === "system") {
-        bubble = document.createElement("div");
-        bubble.className = "chat-system-msg";
-        // Extract emoji prefix if present for nicer styling
-        const msg = data.message || "";
-        bubble.textContent = msg;
-    } else {
-        const isMine = data.sender === mySlot;
-
-        bubble = document.createElement("div");
-        bubble.className = `chat-bubble-row ${isMine ? "chat-bubble-row--mine" : "chat-bubble-row--theirs"}`;
-
-        const bubbleInner = document.createElement("div");
-        bubbleInner.className = `chat-bubble ${isMine ? "chat-bubble--mine" : "chat-bubble--theirs"}`;
-
-        if (!isMine) {
-            const nameEl = document.createElement("div");
-            nameEl.className = "chat-bubble__name";
-            nameEl.style.color = `var(--${COLOR_MAP[data.sender] || "text"})`;
-            nameEl.textContent = data.playerName || "Player";
-            bubbleInner.appendChild(nameEl);
-        }
-
-        const textEl = document.createElement("div");
-        textEl.className = "chat-bubble__text";
-        textEl.textContent = data.message;
-
-        const timeEl = document.createElement("div");
-        timeEl.className = "chat-bubble__time";
-        timeEl.textContent = formatChatTime(data.timestamp);
-
-        bubbleInner.appendChild(textEl);
-        bubbleInner.appendChild(timeEl);
-        bubble.appendChild(bubbleInner);
+        if (data.sender === mySlot) stick = true;
+        if (data.sender !== "system" && data.sender !== mySlot) unread++;
     }
 
-    bubble.classList.add("chat-fade-in");
-    chatMessagesEl.appendChild(bubble);
+    chatMessagesEl.appendChild(frag);
+    chatHasRendered = true;
 
-    if (data.sender !== "system" && data.sender !== mySlot && !chatIsOpen && !isChatDocked()) {
-        chatUnreadCount++;
+    if (unread && wasRendered && !chatIsOpen && !isChatDocked()) {
+        chatUnreadCount += unread;
         updateChatUnreadBadge();
         playChatNotificationSound();
     }
 
-    if (wasNearBottom || data.sender === mySlot) {
-        scrollChatToBottom();
+    if (stick) scrollChatToBottom();
+}
+
+function buildChatRow(data, id, mySlot, keepPinned) {
+    if (data.sender === "system") {
+        const el = document.createElement("div");
+        el.className = "chat-system-msg";
+        el.textContent = data.message || "";
+        return el;
     }
+
+    const isMine = data.sender === mySlot;
+    const hasGif = !!(data.gif && safeMediaUrl(data.gif.url));
+
+    const row = document.createElement("div");
+    row.className = `chat-bubble-row ${isMine ? "chat-bubble-row--mine" : "chat-bubble-row--theirs"}`;
+    row.dataset.id = id;
+
+    const col = document.createElement("div");
+    col.className = "chat-bubble-col";
+
+    const bubble = document.createElement("div");
+    bubble.className = `chat-bubble ${isMine ? "chat-bubble--mine" : "chat-bubble--theirs"}${hasGif ? " chat-bubble--media" : ""}`;
+
+    if (!isMine) {
+        const nameEl = document.createElement("div");
+        nameEl.className = "chat-bubble__name";
+        nameEl.style.color = `var(--${COLOR_MAP[data.sender] || "text"})`;
+        nameEl.textContent = data.playerName || "Player";
+        bubble.appendChild(nameEl);
+    }
+
+    if (data.replyTo && data.replyTo.id) bubble.appendChild(buildQuote(data.replyTo));
+
+    if (hasGif) bubble.appendChild(buildGifImg(data.gif, keepPinned));
+
+    if (data.message) {
+        const textEl = document.createElement("div");
+        textEl.className = "chat-bubble__text";
+        textEl.textContent = data.message;
+        bubble.appendChild(textEl);
+    }
+
+    const timeEl = document.createElement("div");
+    timeEl.className = "chat-bubble__time";
+    timeEl.textContent = formatChatTime(data.timestamp);
+    bubble.appendChild(timeEl);
+
+    const reactionsEl = document.createElement("div");
+    reactionsEl.className = "chat-reactions";
+
+    const actions = document.createElement("div");
+    actions.className = "chat-actions";
+    actions.innerHTML =
+        '<button class="chat-act-btn" type="button" data-act="react" aria-label="React">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg>' +
+        '</button>' +
+        '<button class="chat-act-btn" type="button" data-act="reply" aria-label="Reply">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 6 6v3"/></svg>' +
+        '</button>';
+
+    const pop = document.createElement("div");
+    pop.className = "chat-react-pop";
+    for (const emoji of REACTION_EMOJIS) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.emoji = emoji;
+        b.setAttribute("aria-label", `React ${emoji}`);
+        b.textContent = emoji;
+        pop.appendChild(b);
+    }
+
+    col.append(bubble, reactionsEl, actions, pop);
+    row.appendChild(col);
+
+    const entry = { data, row, reactionsEl };
+    chatMessages.set(row.dataset.id, entry);
+    renderReactions(entry);
+
+    return row;
+}
+
+function buildGifImg(gif, keepPinned) {
+    const img = document.createElement("img");
+    img.className = "chat-gif";
+    img.alt = "GIF";
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.draggable = false;
+
+    const w = Number(gif.w) || 0;
+    const h = Number(gif.h) || 0;
+    const reserved = w > 0 && h > 0;
+
+    // Reserve the exact space before the image arrives so the chat
+    // never jumps while GIFs load.
+    if (reserved) {
+        let dw = Math.min(CHAT_GIF_MAX_W, w);
+        if (dw * h / w > CHAT_GIF_MAX_H) dw = Math.round(CHAT_GIF_MAX_H * w / h);
+        img.style.width = dw + "px";
+        img.style.aspectRatio = `${w} / ${h}`;
+    } else {
+        img.style.width = "200px";
+        img.style.aspectRatio = "4 / 3";
+    }
+
+    img.addEventListener("load", () => {
+        if (!reserved) {
+            img.style.aspectRatio = "";
+            const nw = img.naturalWidth, nh = img.naturalHeight;
+            if (nw && nh) {
+                let dw = Math.min(CHAT_GIF_MAX_W, nw);
+                if (dw * nh / nw > CHAT_GIF_MAX_H) dw = Math.round(CHAT_GIF_MAX_H * nw / nh);
+                img.style.width = dw + "px";
+            }
+        }
+        if (keepPinned && isChatNearBottom()) scrollChatToBottom();
+    }, { once: true });
+
+    img.addEventListener("error", () => {
+        const fallback = document.createElement("div");
+        fallback.className = "chat-bubble__text";
+        fallback.textContent = "GIF unavailable";
+        img.replaceWith(fallback);
+    }, { once: true });
+
+    img.src = safeMediaUrl(gif.url);
+    return img;
+}
+
+function buildQuote(reply) {
+    const q = document.createElement("button");
+    q.type = "button";
+    q.className = "chat-quote";
+    q.dataset.replyId = reply.id;
+    q.style.setProperty("--qc", `var(--${COLOR_MAP[reply.sender] || "accent"})`);
+
+    if (reply.gif) {
+        const src = safeMediaUrl(chatMessages.get(reply.id)?.data?.gif?.url);
+        if (src) {
+            const thumb = document.createElement("img");
+            thumb.className = "chat-quote__thumb";
+            thumb.alt = "";
+            thumb.decoding = "async";
+            thumb.referrerPolicy = "no-referrer";
+            thumb.src = src;
+            q.appendChild(thumb);
+        }
+    }
+
+    const body = document.createElement("span");
+    body.className = "chat-quote__body";
+    const name = document.createElement("span");
+    name.className = "chat-quote__name";
+    name.textContent = reply.playerName || "Player";
+    const text = document.createElement("span");
+    text.className = "chat-quote__text";
+    text.textContent = reply.text || (reply.gif ? "GIF" : "");
+    body.append(name, text);
+    q.appendChild(body);
+    return q;
+}
+
+function renderReactions(entry) {
+    const el = entry.reactionsEl;
+    if (!el) return;
+
+    const mySlot = getMySlot();
+    const byEmoji = new Map();
+    const reactions = entry.data.reactions || {};
+
+    for (const slot in reactions) {
+        const emoji = reactions[slot];
+        if (!REACTION_EMOJIS.includes(emoji)) continue;
+        if (!byEmoji.has(emoji)) byEmoji.set(emoji, []);
+        byEmoji.get(emoji).push(slot);
+    }
+
+    const existing = new Map(Array.from(el.children).map(c => [c.dataset.emoji, c]));
+
+    for (const emoji of REACTION_EMOJIS) {
+        const slots = byEmoji.get(emoji);
+        if (!slots) continue;
+
+        let chip = existing.get(emoji);
+        if (chip) {
+            existing.delete(emoji);
+        } else {
+            chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "chat-react-chip";
+            chip.dataset.emoji = emoji;
+            el.appendChild(chip);
+        }
+
+        const label = slots.length > 1 ? `${emoji} ${slots.length}` : emoji;
+        if (chip.dataset.label !== label) {
+            chip.dataset.label = label;
+            chip.replaceChildren();
+            chip.append(document.createTextNode(emoji));
+            if (slots.length > 1) {
+                const n = document.createElement("b");
+                n.textContent = String(slots.length);
+                chip.appendChild(n);
+            }
+        }
+        chip.classList.toggle("is-mine", slots.includes(mySlot));
+        chip.title = slots.map(s => (latestPlayers?.[s]?.name) || colorLabel(s)).join(", ");
+    }
+
+    existing.forEach(chip => chip.remove());
 }
 
 function addSystemMessage(text) {
@@ -2384,7 +2709,7 @@ function updateChatUnreadBadge() {
 
 function playChatNotificationSound() {
     try {
-        if (!audioCtx || audioCtx.state === "suspended") return;
+        if (!audioCtx || audioCtx.state !== "running") return;
         const osc  = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = "sine";
@@ -2408,11 +2733,12 @@ function openChatPanel() {
     chatUnreadCount = 0;
     updateChatUnreadBadge();
     scrollChatToBottom();
-    chatInput?.focus();
+    chatInput?.focus({ preventScroll: true });
 }
 
 function closeChatPanel() {
     chatIsOpen = false;
+    clearChatSelection();
     chatPanel?.classList.remove("chat-panel--open");
     chatBackdrop?.classList.remove("chat-backdrop--on");
     chatToggleBtn?.setAttribute("aria-expanded", "false");
@@ -2423,8 +2749,10 @@ chatBackdrop?.addEventListener("click", closeChatPanel);
 
 document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (confirmLeaveModal && confirmLeaveModal.style.display !== "none") hideConfirmLeaveModal();
-    else if (chatIsOpen) closeChatPanel();
+    if (confirmLeaveModal && confirmLeaveModal.style.display !== "none") { hideConfirmLeaveModal(); return; }
+    if (chatMessagesEl?.querySelector(".is-selected, .is-picking")) { clearChatSelection(); return; }
+    if (chatReplyTarget && document.activeElement === chatInput) { clearReply(); return; }
+    if (chatIsOpen) closeChatPanel();
 });
 
 chatToggleBtn?.addEventListener("click", () => {
@@ -2444,8 +2772,299 @@ function autoGrowChatInput() {
     chatInput.style.height = Math.min(chatInput.scrollHeight, 96) + "px";
 }
 
+/* ---------- selecting a message / reactions / reply ---------- */
+
+function clearChatSelection() {
+    chatMessagesEl?.querySelectorAll(".is-selected, .is-picking").forEach(r => r.classList.remove("is-selected", "is-picking"));
+}
+
+function openReactionPicker(row) {
+    const entry = chatMessages.get(row.dataset.id);
+    const mine  = entry?.data?.reactions?.[getMySlot()];
+    const pop   = row.querySelector(".chat-react-pop");
+    if (!pop) return;
+
+    pop.querySelectorAll("button").forEach(b => b.classList.toggle("is-mine", b.dataset.emoji === mine));
+
+    const room = row.getBoundingClientRect().top - chatMessagesEl.getBoundingClientRect().top;
+    pop.classList.toggle("pick-above", room > 52);
+    pop.classList.toggle("pick-below", room <= 52);
+
+    row.classList.add("is-picking");
+}
+
+async function toggleReaction(id, emoji) {
+    const mySlot = getMySlot();
+    if (!mySlot) {
+        showToast("Join the room to react", "error");
+        return;
+    }
+    const entry = chatMessages.get(id);
+    if (!entry || !REACTION_EMOJIS.includes(emoji)) return;
+
+    const mineRef = ref(db, `rooms/${roomCode}/chat/${id}/reactions/${mySlot}`);
+    try {
+        // Firebase applies the write locally right away, so the chip
+        // updates instantly through onChildChanged.
+        if (entry.data.reactions?.[mySlot] === emoji) await remove(mineRef);
+        else await set(mineRef, emoji);
+    } catch (err) {
+        console.warn("Reaction failed:", err);
+        showToast("Couldn't add that reaction", "error");
+    }
+}
+
+function beginReply(id) {
+    const entry = chatMessages.get(id);
+    if (!entry) return;
+    const d = entry.data;
+
+    const stick = isChatNearBottom();
+    chatReplyTarget = {
+        id,
+        sender: d.sender,
+        playerName: d.playerName || "Player",
+        text: (d.message || "").slice(0, 80),
+        gif: !!d.gif
+    };
+
+    chatReplyName.textContent = chatReplyTarget.playerName;
+    chatReplyText.textContent = chatReplyTarget.text || (chatReplyTarget.gif ? "GIF" : "");
+    chatReplyBar.hidden = false;
+    clearChatSelection();
+    chatInput?.focus({ preventScroll: true });
+    if (stick) scrollChatToBottom();
+}
+
+function clearReply() {
+    if (!chatReplyTarget) return;
+    chatReplyTarget = null;
+    chatReplyBar.hidden = true;
+}
+
+function jumpToMessage(id) {
+    const entry = chatMessages.get(id);
+    if (!entry || !entry.row.isConnected) {
+        showToast("That message isn't available anymore");
+        return;
+    }
+    entry.row.scrollIntoView({ block: "center", behavior: "smooth" });
+    entry.row.classList.remove("chat-flash");
+    void entry.row.offsetWidth;
+    entry.row.classList.add("chat-flash");
+    setTimeout(() => entry.row.classList.remove("chat-flash"), 950);
+}
+
+chatReplyCancel?.addEventListener("click", clearReply);
+
+/* One delegated click handler for every message in the list. */
+chatMessagesEl?.addEventListener("click", (e) => {
+    const row = e.target.closest(".chat-bubble-row");
+    if (!row) { clearChatSelection(); return; }
+    const id = row.dataset.id;
+
+    const quote = e.target.closest(".chat-quote");
+    if (quote) { jumpToMessage(quote.dataset.replyId); return; }
+
+    const popBtn = e.target.closest(".chat-react-pop button");
+    if (popBtn) { toggleReaction(id, popBtn.dataset.emoji); clearChatSelection(); return; }
+
+    const chip = e.target.closest(".chat-react-chip");
+    if (chip) { toggleReaction(id, chip.dataset.emoji); return; }
+
+    const act = e.target.closest("[data-act]");
+    if (act) {
+        if (act.dataset.act === "reply") beginReply(id);
+        else if (row.classList.contains("is-picking")) row.classList.remove("is-picking");
+        else openReactionPicker(row);
+        return;
+    }
+
+    if (e.target.closest(".chat-bubble")) {
+        const was = row.classList.contains("is-selected");
+        clearChatSelection();
+        if (!was) row.classList.add("is-selected");
+    }
+});
+
+document.addEventListener("click", (e) => {
+    if (!e.target.closest(".chat-bubble-row")) clearChatSelection();
+});
+
+/* ---------- GIFs: pick / paste / drop / link ---------- */
+
+function setUploadProgress(p) {
+    chatAttachProg?.style.setProperty("--p", String(Math.max(0, Math.min(1, p))));
+}
+
+function clearPendingGif() {
+    if (pendingGif && pendingGif.file && pendingGif.previewUrl) URL.revokeObjectURL(pendingGif.previewUrl);
+    pendingGif = null;
+    if (chatAttachBox) { chatAttachBox.hidden = true; chatAttachBox.classList.remove("is-uploading"); }
+    chatAttachImg?.removeAttribute("src");
+    setUploadProgress(0);
+}
+
+async function showPendingGif(next) {
+    if (chatSending) return;
+    const stick = isChatNearBottom();
+    clearPendingGif();
+    pendingGif = next;
+    chatAttachImg.src = next.previewUrl;
+    chatAttachBox.hidden = false;
+    chatInput?.focus({ preventScroll: true });
+    if (stick) scrollChatToBottom();
+}
+
+async function stageGifFile(file) {
+    if (!file) return;
+    if (!getMySlot()) { showToast("Join the room to send GIFs", "error"); return; }
+    if (!file.type || !file.type.startsWith("image/")) {
+        showToast("Only GIFs and images can be sent", "error");
+        return;
+    }
+    if (file.size > CHAT_GIF_MAX_BYTES) {
+        showToast("That file is too big (8 MB max)", "error");
+        return;
+    }
+    const previewUrl = URL.createObjectURL(file);
+    const { w, h } = await readImageSize(previewUrl);
+    await showPendingGif({ file, previewUrl, w, h });
+}
+
+async function stageRemoteGif(url) {
+    if (!getMySlot()) { showToast("Join the room to send GIFs", "error"); return; }
+    const { w, h } = await readImageSize(url);
+    await showPendingGif({ file: null, remoteUrl: url, previewUrl: url, w, h });
+}
+
+chatAttachBtn?.addEventListener("click", () => chatFileInput?.click());
+chatFileInput?.addEventListener("change", () => {
+    const file = chatFileInput.files && chatFileInput.files[0];
+    chatFileInput.value = "";
+    stageGifFile(file);
+});
+chatAttachRemove?.addEventListener("click", clearPendingGif);
+
+/* Upload to Firebase Storage with a stall guard, so a misconfigured
+   bucket fails fast instead of hanging for minutes. */
+async function uploadGifToStorage(file, onProgress) {
+    const safeRoom = String(roomCode).replace(/[^\w-]/g, "");
+    const ext = ((file.type.split("/")[1] || "gif").replace(/[^a-z0-9]/gi, "").slice(0, 5)) || "gif";
+    const path = `chat-gifs/${safeRoom}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    const task = uploadBytesResumable(storageRef(storage, path), file, {
+        contentType: file.type,
+        cacheControl: "public,max-age=31536000"
+    });
+
+    let lastTick = Date.now();
+    const stallTimer = setInterval(() => {
+        if (Date.now() - lastTick > CHAT_UPLOAD_STALL_MS) task.cancel();
+    }, 1000);
+
+    try {
+        await new Promise((resolve, reject) => {
+            task.on("state_changed",
+                (s) => { lastTick = Date.now(); onProgress(s.totalBytes ? s.bytesTransferred / s.totalBytes : 0); },
+                reject,
+                resolve
+            );
+        });
+        return await getDownloadURL(task.snapshot.ref);
+    } finally {
+        clearInterval(stallTimer);
+    }
+}
+
+async function resolvePendingGif() {
+    const g = pendingGif;
+    if (g.remoteUrl) return { url: g.remoteUrl, w: g.w, h: g.h };
+
+    chatAttachBox.classList.add("is-uploading");
+    setUploadProgress(0.02);
+
+    try {
+        const url = await uploadGifToStorage(g.file, setUploadProgress);
+        return { url, w: g.w, h: g.h };
+    } catch (err) {
+        console.warn("Storage upload failed:", err);
+        if (g.file.size <= CHAT_GIF_INLINE_MAX) {
+            // small enough to ride along inside the message itself
+            const url = await fileToDataUrl(g.file);
+            return { url, w: g.w, h: g.h, inline: true };
+        }
+        throw err;
+    }
+}
+
+/* paste: images from the clipboard (Ctrl/Cmd+V, phone keyboards, OS GIF pickers) */
+chatPanel?.addEventListener("paste", (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+
+    let files = Array.from(cd.items || [])
+        .filter(it => it.kind === "file" && it.type.startsWith("image/"))
+        .map(it => it.getAsFile())
+        .filter(Boolean);
+    if (!files.length) files = Array.from(cd.files || []).filter(f => f.type.startsWith("image/"));
+
+    if (files.length) {
+        e.preventDefault();
+        stageGifFile(files.find(f => f.type === "image/gif") || files[0]);
+        return;
+    }
+
+    // some pickers paste an <img src="…"> instead of a file
+    const html = cd.getData("text/html");
+    const m = html && html.match(/<img[^>]+src=["']([^"']+)["']/i);
+    if (m) {
+        const url = gifUrlFromText(m[1].replace(/&amp;/g, "&"));
+        if (url) {
+            e.preventDefault();
+            stageRemoteGif(url);
+        }
+    }
+});
+
+/* drag & drop onto the chat */
+const dragHasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+let chatDragDepth = 0;
+
+chatPanel?.addEventListener("dragenter", (e) => {
+    if (!dragHasFiles(e)) return;
+    e.preventDefault();
+    chatDragDepth++;
+    chatDropEl?.classList.add("is-on");
+});
+
+chatPanel?.addEventListener("dragover", (e) => {
+    if (dragHasFiles(e)) e.preventDefault();
+});
+
+chatPanel?.addEventListener("dragleave", (e) => {
+    if (!dragHasFiles(e)) return;
+    chatDragDepth = Math.max(0, chatDragDepth - 1);
+    if (!chatDragDepth) chatDropEl?.classList.remove("is-on");
+});
+
+chatPanel?.addEventListener("drop", (e) => {
+    chatDragDepth = 0;
+    chatDropEl?.classList.remove("is-on");
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
+    if (!files.length) return;
+    e.preventDefault();
+    stageGifFile(files.find(f => f.type === "image/gif") || files[0]);
+});
+
+// a stray file dropped outside the chat must not navigate away from the game
+window.addEventListener("dragover", (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+window.addEventListener("drop",     (e) => { if (dragHasFiles(e)) e.preventDefault(); });
+
+/* ---------- sending ---------- */
+
 async function sendMessage() {
-    if (!chatInput) return;
+    if (!chatInput || chatSending) return;
 
     const mySlot = getMySlot();
     if (!mySlot) {
@@ -2454,7 +3073,7 @@ async function sendMessage() {
     }
 
     const raw = chatInput.value.trim();
-    if (!raw) return;
+    if (!raw && !pendingGif) return;
     if (raw.length > CHAT_MAX_LENGTH) return;
 
     const now = Date.now();
@@ -2462,23 +3081,47 @@ async function sendMessage() {
     lastMessageSentAt = now;
 
     const playerName = sessionStorage.getItem("playerName") || colorLabel(mySlot);
+    const payload = { sender: mySlot, playerName, message: raw, timestamp: Date.now() };
+    const reply = chatReplyTarget;
 
-    chatInput.value = "";
-    updateChatCharCounter();
-    autoGrowChatInput();
+    chatSending = true;
+    chatSendBtn && (chatSendBtn.disabled = true);
 
     try {
-        await push(chatRef, {
-            sender: mySlot,
-            playerName,
-            message: raw,
-            timestamp: Date.now()
-        });
+        if (pendingGif) {
+            // keep the draft on screen until the upload really succeeds
+            payload.gif = await resolvePendingGif();
+        } else {
+            const link = gifUrlFromText(raw);
+            if (link) {
+                payload.gif = { url: link, w: 0, h: 0 };
+                payload.message = "";
+            }
+        }
+        if (reply) payload.replyTo = reply;
+
+        chatInput.value = "";
+        updateChatCharCounter();
+        autoGrowChatInput();
+        clearPendingGif();
+        clearReply();
+
+        await push(chatRef, payload);
     } catch (err) {
         console.error("Failed to send chat message:", err);
+        chatAttachBox?.classList.remove("is-uploading");
+        showToast(
+            pendingGif
+                ? "Couldn't upload that GIF. Check that Firebase Storage is set up."
+                : "Message didn't send. Check your connection.",
+            "error"
+        );
+    } finally {
+        chatSending = false;
+        chatSendBtn && (chatSendBtn.disabled = false);
     }
 
-    chatInput.focus();
+    chatInput.focus({ preventScroll: true });
 }
 
 chatSendBtn?.addEventListener("click", sendMessage);
